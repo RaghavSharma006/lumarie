@@ -18,6 +18,7 @@
 #include "protocomm.h"
 #include "protocomm_ble.h"
 #include "protocomm_security2.h"
+#include "board_profile.h"
 
 // The BLE service exposes only authenticated protocomm endpoints.
 // No panel GPIO, waveform, voltage or controller command is assumed here.
@@ -77,7 +78,8 @@ static esp_err_t mock_display_refresh(void) {
     // A real adapter must power the verified driver, read only committed
     // staging bytes, wait for BUSY/refresh completion, then power it down.
     // Until its documentation exists this reports no physical display.
-    ESP_LOGW(TAG, "mock display received verified frame; no physical refresh");
+    ESP_LOGW(TAG, "MOCK DISPLAY %s: verified frame received; no physical refresh",
+             LUMAIRIE_PANEL_MODEL);
     return ESP_ERR_NOT_SUPPORTED;
 }
 

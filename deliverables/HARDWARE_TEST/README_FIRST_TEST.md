@@ -1,0 +1,7 @@
+# Lumairie first hardware test — current boundary
+
+The included `Lumairie-arm64-release.apk` is an optimized ABI-specific **development-signed** Android build. It is installable for app and Demo Mode evaluation on an ARM64 Android device. It does **not** yet send an image to a physical ESP32. The firmware candidate has no verified buttonless Wi-Fi transport, secure ownership flow, or EL073TS1 display driver. No firmware binary or flash script is included because no firmware build passed. Do not attempt a panel connection or flash an unverified image based on this package.
+
+To install the APK with Android platform tools, connect the phone and run `adb install -r Lumairie-arm64-release.apk` from this folder. Open Lumairie and exercise local photo selection, crop/orientation, six-color Demo Mode and both themes. A real-device send will state that secure image transfer is not enabled. Do not interpret Demo Mode as proof of ESP32 behavior.
+
+Before a physical display test, obtain the exact supplier PCB schematic, controller/driver documentation, GPIO map and voltage/power sequence listed in `HARDWARE_CONNECTIONS.md`; finish and compile buttonless Wi-Fi firmware; add authenticated phone transfer; then package verified bootloader, partition table, application binary and build-generated flash arguments. Record real serial logs, display outcome and current measurements separately in `TEST_RESULTS.md`.

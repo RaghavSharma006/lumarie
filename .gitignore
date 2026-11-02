@@ -3,3 +3,9 @@ deliverables/windows/*.zip
 deliverables/windows/verify/
 simulator/qa-*.png
 WORK_CHECKPOINT.md
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+apps/mobile/android/.kotlin/
+deliverables/HARDWARE_TEST/*.apk

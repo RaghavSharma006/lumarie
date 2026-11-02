@@ -6,8 +6,9 @@
 | --- | ---: | --- | --- |
 | `android/Lumairie-debug.apk` | 209,517,857 | `ef839b971ce44967984dd0006475a2c600f7a2a8ee40d6b521cdfd9f5ec12bbd` | `flutter build apk --debug --no-pub` succeeded; Android `apksigner verify` confirmed APK Signature Scheme v2; `aapt2 dump badging` identified `io.lumarie.mobile`, version 0.1.0, min SDK 24. |
 | `windows/Lumairie-Windows-Simulator.zip` | 14,811,675 | `1ae9fdfca3345c6fabb6ca8f022406240beb37655167de64c6d76b3cd400e630` | ZIP entries checked, extracted launcher started a server at `127.0.0.1:8787`, and HTTP `/` returned 200. The launcher sleep command was then corrected and the ZIP rebuilt; the updated launcher entry was checked. |
+| `HARDWARE_TEST/Lumairie-arm64-release.apk` | 26,088,803 | `8a5d7a8adfb952e23a041aaf1ba4d180938bd739d2472980739789f0ef483bcf` | `flutter build apk --release --split-per-abi` succeeded; ABI-specific ARM64 APK verified with `apksigner` v2 and `aapt2`. Uses the development/debug signing key. |
 
-No firmware `.bin` or iOS `.ipa` is included. ESP-IDF is unavailable here, and iOS requires macOS/Xcode. The APK is a debug-signed evaluation build.
+No firmware `.bin` or iOS `.ipa` is included. ESP-IDF source was cloned but the toolchain installation and firmware compilation were not completed; iOS requires macOS/Xcode. Both APKs use development/debug signing.
 
 ## Source checks
 
