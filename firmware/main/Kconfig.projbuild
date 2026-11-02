@@ -1,0 +1,13 @@
+menu "Lumairie hardware configuration"
+    config LUMAIRIE_PAIR_GPIO
+        int "Board verified active-low pairing/wake GPIO (-1 disables physical pairing)"
+        default -1
+        range -1 21
+        help
+            Set only after board schematic and button circuit are verified.
+            Firmware keeps BLE closed when this is -1.
+    config LUMAIRIE_ADVERTISE_SECONDS
+        int "BLE advertising window after physical button hold"
+        default 120
+        range 30 600
+endmenu
