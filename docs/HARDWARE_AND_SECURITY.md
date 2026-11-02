@@ -1,10 +1,12 @@
 # Hardware and security boundary
 
+**Final product requirement:** buttonless Wi-Fi-connected standby. The existing ESP32-C3 firmware is an older physical-button/deep-sleep candidate and must not be flashed as production firmware. Its limitations are documented here for review; it does not implement the final buttonless security or power design.
+
 ## Required supplier details
 
 Before enabling a physical display adapter, obtain the exact panel part number, controller and compatible driver-board schematic, power sequencing, logic and panel voltages, SPI timing, initialization commands, refresh waveform or vendor driver, BUSY polarity/timing, sleep instructions, orientation, color-index order and expected packed pixel order. None were in the starter bundle. The firmware's `mock_display_refresh()` intentionally returns `ESP_ERR_NOT_SUPPORTED` after verifying a complete frame.
 
-The ESP32-C3 and 8 MB flash partition table are candidates. Confirm RAM, flash, power source, button wiring, wake-capable GPIO and display driver electronics on a prototype. Do not connect a bare E-Ink panel directly to ESP32 GPIO. Measure active advertising, transfer, refresh, idle and deep-sleep currents on the final board. No battery percentage is shown without a verified gauge/ADC circuit.
+The ESP32-C3 and 8 MB flash partition table are candidates. Confirm RAM, flash, power source, Wi-Fi standby current and display driver electronics on a prototype. Do not connect a bare E-Ink panel directly to ESP32 GPIO. Measure provisioning, transfer, refresh and Wi-Fi-connected standby currents on the final board. No battery percentage is shown without a verified gauge/ADC circuit.
 
 ## Pairing and ownership
 
@@ -12,11 +14,11 @@ The firmware fails closed if factory `srp_salt` and `srp_verifier` NVS blobs or 
 
 Production manufacturing must generate each unit's random secret and SRP salt/verifier using Espressif's vetted tooling, inject the verifier and salt into protected NVS, print the matching QR, and retain no plaintext secret in firmware or a central service. The NVS namespace is `factory`, keys `srp_salt` and `srp_verifier`. Exact NVS encryption/eFuse procedures depend on the chosen board and manufacturing process. A BLE name or MAC address alone is never the proof of possession.
 
-This implementation does not enforce exclusive ownership or provide a safe ownership-transfer reset yet. A copied QR plus physical access can authenticate; a local-only device has no central authority to prove that another phone no longer holds a copy. Production reset must rotate the SRP credential and issue a new QR, with a hardware-confirmed long-hold sequence. Do not ship the current static credential lifecycle as an ownership guarantee.
+This implementation does not enforce exclusive ownership or provide a safe ownership-transfer reset yet. A copied QR plus physical access can authenticate; a local-only device has no central authority to prove that another phone no longer holds a copy. Production recovery must rotate credentials through a secure factory or owner-authorized process with no physical button. That process is not implemented. Do not ship the current static credential lifecycle as an ownership guarantee.
 
 ## Power and update
 
-Deep sleep ends BLE reachability. Firmware enters it only when a configured GPIO is valid for deep-sleep wake; otherwise it stays awake and logs the configuration error. A physical wake is required before pairing or transfer. The E-Ink image remains visible without power. A real display adapter must switch driver power off only after BUSY and refresh completion.
+The candidate firmware enters deep sleep only when a configured GPIO is valid for wake; otherwise it stays awake. This cannot satisfy automatic Wi-Fi reception and must be replaced by associated Wi-Fi modem power save plus automatic light sleep, with measured responsiveness and power draw. The E-Ink image remains visible without power. A real display adapter must switch driver power off only after BUSY and refresh completion.
 
 The firmware has 3 MB A/B OTA slots and a gated local update receiver. It rejects updates when signed-app verification/secure boot is not configured, validates image/version before changing the boot slot and uses ESP-IDF rollback support. The pending slot is accepted only after NVS, staging partition and factory security material initialize. Panel self-test, anti-rollback eFuse policy and signed update delivery from the mobile app remain to be completed and tested with actual hardware. Keep private signing keys outside the repository and application bundle.
 

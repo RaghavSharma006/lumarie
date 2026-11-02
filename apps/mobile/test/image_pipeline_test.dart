@@ -78,4 +78,35 @@ void main() {
         onProgress: (fraction, status) {}, dropAckOnceAt: 0);
     expect(device.refreshed, true);
   });
+
+  test('simulated corruption and interruption retain previous display',
+      () async {
+    final frame = ImagePipeline.demoFrame(
+        profile: const PanelProfile(width: 4, height: 2));
+    final device = MockFrame();
+    await device.transfer(frame, onProgress: (fraction, status) {});
+    final visible = device.visibleFrame;
+    await expectLater(
+        device.transfer(frame,
+            onProgress: (fraction, status) {}, corruptChunkAt: 0),
+        throwsStateError);
+    expect(device.visibleFrame, same(visible));
+    await expectLater(
+        device.transfer(frame,
+            onProgress: (fraction, status) {}, interruptAt: 0),
+        throwsStateError);
+    expect(device.visibleFrame, same(visible));
+  });
+
+  test('packed preview contains only the six palette colors', () {
+    final frame = ImagePipeline.demoFrame(
+        profile: const PanelProfile(width: 4, height: 2));
+    final png = ImagePipeline.previewPng(frame);
+    final image = img.decodePng(png)!;
+    final colors = <String>{};
+    for (final pixel in image) {
+      colors.add('${pixel.r},${pixel.g},${pixel.b}');
+    }
+    expect(colors.length, lessThanOrEqualTo(6));
+  });
 }

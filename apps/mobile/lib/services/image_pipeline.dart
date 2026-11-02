@@ -27,6 +27,23 @@ class PackedFrame {
 }
 
 class ImagePipeline {
+  static Uint8List previewPng(PackedFrame frame) {
+    final output = img.Image(width: frame.width, height: frame.height);
+    for (var y = 0; y < frame.height; y++) {
+      for (var x = 0; x < frame.width; x++) {
+        final index = y * frame.width + x;
+        final packed = frame.pixels[index ~/ 2];
+        final colorIndex = index.isEven ? packed >> 4 : packed & 0x0F;
+        if (colorIndex >= PanelProfile.palette.length) {
+          throw const FormatException('Unsupported palette index');
+        }
+        final color = PanelProfile.palette[colorIndex];
+        output.setPixelRgb(x, y, color[0], color[1], color[2]);
+      }
+    }
+    return Uint8List.fromList(img.encodePng(output));
+  }
+
   static PackedFrame demoFrame({
     bool landscape = false,
     PanelProfile profile = const PanelProfile(),

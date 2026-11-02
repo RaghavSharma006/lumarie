@@ -1,13 +1,14 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'design_system.dart';
 import 'services/image_pipeline.dart';
 import 'services/mock_frame.dart';
 import 'services/pairing.dart';
+import 'services/photo_store_web.dart'
+    if (dart.library.io) 'services/photo_store_io.dart' as photo;
 
 void main() => runApp(const LumairieApp());
 
@@ -33,11 +34,19 @@ class _LumairieAppState extends State<LumairieApp> {
   int widgetFilter = 0;
   final enabledWidgets = <String>{'Calendar', 'Weather', 'To-do'};
   final addedWidgets = <String>{};
-  final photos = <String>[];
+  final photos = <photo.PhotoRecord>[];
   double sendProgress = 0;
   String sendStatus = '';
   bool sending = false;
   bool pairingBusy = false;
+  final MockFrame mockFrame = MockFrame();
+  final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+  bool simWifiConnected = true;
+  int simFault = 0;
+  String simState = 'Standby';
+  String simStatus = 'Waiting for a photo';
+  Uint8List? simPreview;
   String? pairedName;
   String? pairingError;
 
@@ -56,12 +65,13 @@ class _LumairieAppState extends State<LumairieApp> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    final savedPhotos = await photo.loadPhotos();
     if (!mounted) return;
     setState(() {
       dark = prefs.getBool('dark') ?? false;
       demo = prefs.getBool('demo') ?? true;
       pairedName = prefs.getString('pairedName');
-      photos.addAll(prefs.getStringList('photos') ?? []);
+      photos.addAll(savedPhotos);
       hubMode = prefs.getInt('hubMode') ?? 0;
       if (prefs.containsKey('enabledWidgets')) {
         enabledWidgets
@@ -88,12 +98,8 @@ class _LumairieAppState extends State<LumairieApp> {
     final picked = await ImagePicker()
         .pickImage(source: ImageSource.gallery, imageQuality: 100);
     if (picked == null) return;
-    final dir = await getApplicationDocumentsDirectory();
-    final target =
-        File('${dir.path}/photo_${DateTime.now().microsecondsSinceEpoch}.jpg');
-    await File(picked.path).copy(target.path);
-    photos.insert(0, target.path);
-    (await SharedPreferences.getInstance()).setStringList('photos', photos);
+    final record = await photo.savePhoto(await picked.readAsBytes());
+    photos.insert(0, record);
     if (mounted) {
       setState(() {
         selectedPhoto = 0;
@@ -109,14 +115,24 @@ class _LumairieAppState extends State<LumairieApp> {
           : 'Secure image transfer needs hardware validation before it can be enabled.');
       return;
     }
+    if (kIsWeb && !simWifiConnected) {
+      setState(() {
+        simState = 'Disconnected';
+        simStatus = 'Wi-Fi is disconnected. The previous image is unchanged.';
+      });
+      _notice(simStatus);
+      return;
+    }
     setState(() {
       sending = true;
       sendProgress = 0;
       sendStatus = 'Preparing photo';
+      simState = 'Waking';
+      simStatus = 'Preparing image locally';
     });
     try {
       final bytes = photos.isNotEmpty && selectedPhoto < photos.length
-          ? await File(photos[selectedPhoto]).readAsBytes()
+          ? await photos[selectedPhoto].bytes()
           : null;
       final packed = bytes == null
           ? ImagePipeline.demoFrame(landscape: orientation == 1)
@@ -126,19 +142,45 @@ class _LumairieAppState extends State<LumairieApp> {
               focalX: focalX,
               focalY: focalY,
               quarterTurns: quarterTurns);
-      final frame = MockFrame();
-      await frame.transfer(packed, onProgress: (value, status) {
+      setState(() {
+        simState = 'Transferring';
+        simStatus = 'Sending packed pixels';
+      });
+      await mockFrame.transfer(packed,
+          dropAckOnceAt: kIsWeb && simFault == 1 ? 0 : null,
+          corruptChunkAt: kIsWeb && simFault == 2 ? 0 : null,
+          interruptAt: kIsWeb && simFault == 3 ? 256 : null,
+          onProgress: (value, status) {
         if (mounted) {
           setState(() {
             sendProgress = value;
             sendStatus = status;
+            simStatus = status;
+            if (value >= .96) simState = 'Verifying';
           });
         }
       });
       if (mounted) {
+        setState(() {
+          simState = 'Refreshing';
+          simStatus = 'Rendering six-color display';
+        });
+        final preview = ImagePipeline.previewPng(mockFrame.visibleFrame!);
+        if (!mounted) return;
+        setState(() {
+          simPreview = preview;
+          simState = 'Standby';
+          simStatus = 'Display refreshed; Wi-Fi power save active';
+        });
         _notice('Demo frame refreshed. Image verified before display.');
       }
     } catch (error) {
+      if (mounted) {
+        setState(() {
+          simState = 'Error';
+          simStatus = '$error · previous image retained';
+        });
+      }
       if (mounted) _notice('Transfer failed: $error');
     } finally {
       if (mounted) setState(() => sending = false);
@@ -146,6 +188,10 @@ class _LumairieAppState extends State<LumairieApp> {
   }
 
   Future<void> _scanAndPair() async {
+    if (kIsWeb) {
+      _notice('Use the Android or iOS app to pair a physical frame.');
+      return;
+    }
     final raw = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => ScanQrPage(dark: dark)),
     );
@@ -176,13 +222,14 @@ class _LumairieAppState extends State<LumairieApp> {
     }
   }
 
-  void _notice(String value) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(value)));
+  void _notice(String value) => messengerKey.currentState
+      ?.showSnackBar(SnackBar(content: Text(value)));
 
   @override
   Widget build(BuildContext context) {
     final p = Palette(dark);
     return MaterialApp(
+      scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'Lumairie',
       theme: ThemeData(
@@ -194,18 +241,101 @@ class _LumairieAppState extends State<LumairieApp> {
           highlightColor: Colors.transparent),
       home: Scaffold(
         backgroundColor: p.background,
-        body: SafeArea(
-            child: Center(
-                child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
-          child: Column(children: [
-            Expanded(child: _page(p)),
-            if ({0, 3, 4}.contains(page)) _nav(p),
-          ]),
-        ))),
+        body: SafeArea(child: LayoutBuilder(builder: (context, constraints) {
+          Widget phone = ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(children: [
+              Expanded(child: _page(p)),
+              if ({0, 3, 4}.contains(page)) _nav(p),
+            ]),
+          );
+          if (kIsWeb && constraints.maxWidth >= 820) {
+            return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              SizedBox(width: 430, child: phone),
+              const SizedBox(width: 28),
+              SizedBox(width: 340, child: _simPanel(p)),
+            ]);
+          }
+          return Center(child: phone);
+        })),
       ),
     );
   }
+
+  Widget _simPanel(Palette p) =>
+      ListView(padding: const EdgeInsets.all(18), children: [
+        Text('LOCAL SIMULATOR',
+            style: TextStyle(
+                color: p.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2)),
+        const SizedBox(height: 12),
+        Text('Fake ESP32-C3 · Spectra 6', style: Design.title(p, size: 19)),
+        const SizedBox(height: 8),
+        Text('State: $simState', style: Design.body(p)),
+        Text(simStatus, style: Design.caption(p, muted: true)),
+        const SizedBox(height: 18),
+        Surface(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('FAKE FRAME DISPLAY', style: Design.caption(p, muted: true)),
+          const SizedBox(height: 10),
+          AspectRatio(
+              aspectRatio: 800 / 480,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                color: const Color(0xFF3A3029),
+                child: Container(
+                    color: const Color(0xFFFAF7ED),
+                    child: simPreview == null
+                        ? Center(
+                            child: Text('No image displayed',
+                                style: Design.caption(Palette(false),
+                                    muted: true)))
+                        : Image.memory(simPreview!, fit: BoxFit.contain)),
+              )),
+          const SizedBox(height: 8),
+          Text('Six-color output from the shared Flutter codec',
+              style: Design.caption(p, muted: true)),
+        ])),
+        const SizedBox(height: 17),
+        Row(children: [
+          Icon(simWifiConnected ? Icons.wifi : Icons.wifi_off,
+              size: 18, color: p.foreground),
+          const SizedBox(width: 8),
+          Text(simWifiConnected ? 'Wi-Fi connected' : 'Wi-Fi disconnected',
+              style: Design.body(p))
+        ]),
+        const SizedBox(height: 10),
+        PrimaryButton(
+            label: simWifiConnected ? 'Disconnect Wi-Fi' : 'Connect Wi-Fi',
+            outline: true,
+            onTap: () => setState(() {
+                  simWifiConnected = !simWifiConnected;
+                  simState = simWifiConnected ? 'Standby' : 'Disconnected';
+                  simStatus = simWifiConnected
+                      ? 'Local Wi-Fi standby'
+                      : 'Previous image remains visible';
+                })),
+        const SizedBox(height: 20),
+        Text('Next transfer', style: Design.caption(p, muted: true)),
+        const SizedBox(height: 9),
+        Wrap(spacing: 6, runSpacing: 7, children: [
+          for (var i = 0; i < 4; i++)
+            ChoicePill(
+                label: ['Normal', 'Drop ACK', 'Corrupt', 'Interrupt'][i],
+                selected: simFault == i,
+                compact: true,
+                onTap: () => setState(() => simFault = i))
+        ]),
+        const SizedBox(height: 14),
+        PrimaryButton(label: 'Choose a photo', onTap: _pick),
+        const SizedBox(height: 9),
+        Text(
+            'Use the phone preview’s Send button to test transfer and refresh.',
+            style: Design.caption(p, muted: true)),
+      ]);
 
   Widget _page(Palette p) {
     switch (page) {
@@ -436,7 +566,7 @@ class _LumairieAppState extends State<LumairieApp> {
                   ClipRRect(
                       borderRadius: BorderRadius.circular(7),
                       child: i < photos.length
-                          ? Image.file(File(photos[i]), fit: BoxFit.cover)
+                          ? Image(image: photos[i].provider, fit: BoxFit.cover)
                           : CustomPaint(
                               painter: ThumbnailPainter(i - photos.length))),
                   if (selectedPhoto == i)
@@ -491,7 +621,7 @@ class _LumairieAppState extends State<LumairieApp> {
                   kind: hallway ? 1 : 0,
                   landscape: orientation == 1,
                   image: photos.isNotEmpty && selectedPhoto < photos.length
-                      ? FileImage(File(photos[selectedPhoto]))
+                      ? photos[selectedPhoto].provider
                       : null,
                   alignment: Alignment(focalX * 2 - 1, focalY * 2 - 1),
                   fit: fit == 0 ? BoxFit.cover : BoxFit.contain,

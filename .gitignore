@@ -1,0 +1,5 @@
+deliverables/android/*.apk
+deliverables/windows/*.zip
+deliverables/windows/verify/
+simulator/qa-*.png
+WORK_CHECKPOINT.md

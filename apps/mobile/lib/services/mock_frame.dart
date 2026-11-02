@@ -10,6 +10,7 @@ typedef ProgressCallback = void Function(double fraction, String status);
 /// no visible refresh until length, chunk order and CRC are all verified.
 class MockFrame {
   bool refreshed = false;
+  PackedFrame? visibleFrame;
   int expectedOffset = 0;
   Uint8List? _staging;
 
@@ -60,6 +61,7 @@ class MockFrame {
     }
     _staging = null;
     refreshed = true;
+    visibleFrame = frame;
   }
 
   void abort() {
@@ -101,6 +103,8 @@ class MockFrame {
     PackedFrame frame, {
     required ProgressCallback onProgress,
     int? dropAckOnceAt,
+    int? corruptChunkAt,
+    int? interruptAt,
   }) async {
     handle(FrameProtocol.begin(frame), frame);
     try {
@@ -108,10 +112,14 @@ class MockFrame {
       for (var offset = 0;
           offset < frame.pixels.length;
           offset += FrameProtocol.maxChunk) {
+        if (interruptAt == offset) {
+          throw StateError('Simulated Wi-Fi interruption');
+        }
         final end =
             (offset + FrameProtocol.maxChunk).clamp(0, frame.pixels.length);
         final packet = FrameProtocol.chunk(
             offset, Uint8List.sublistView(frame.pixels, offset, end));
+        if (corruptChunkAt == offset) packet[5] ^= 0x01;
         var ack = handle(packet, frame);
         if (dropAckOnceAt == offset && !lostAck) {
           lostAck = true;

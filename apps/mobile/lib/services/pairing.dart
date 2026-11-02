@@ -41,7 +41,7 @@ class PairingService {
     final found = await _native.scanBleDevices('LUMAIRE-');
     if (!found.contains(qr.name)) {
       throw StateError(
-          'Frame not advertising. Hold its pairing button and retry.');
+          'Frame not advertising. Check that it is powered and ready for setup.');
     }
     final response = await _native.fetchCustomData(
       qr.name,
