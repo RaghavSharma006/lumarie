@@ -108,5 +108,21 @@ class PairingService {
     if (!ok) throw StateError('Wi-Fi provisioning was not confirmed.');
   }
 
+  /// Read the authenticated per-device secret from encrypted phone storage.
+  /// It never appears in a URL, a network discovery datagram, or a log.
+  Future<PairingCredential> loadPairedCredential(String id) async {
+    final saved = await _storage.read(key: 'frame_$id');
+    if (saved == null) {
+      throw StateError('Pair the physical frame before sending a photo.');
+    }
+    final data = jsonDecode(saved) as Map<String, dynamic>;
+    return PairingCredential(
+      data['id'] as String,
+      data['name'] as String,
+      data['user'] as String,
+      data['secret'] as String,
+    );
+  }
+
   Future<void> forget(String id) => _storage.delete(key: 'frame_$id');
 }
