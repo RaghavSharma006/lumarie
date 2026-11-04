@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Find and send photos to your LUMAIRIE frame on the same Wi-Fi network.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the pairing QR card for your Lumairie frame.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
