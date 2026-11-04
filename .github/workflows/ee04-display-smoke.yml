@@ -1,0 +1,31 @@
+name: EE04 Spectra 6 display diagnostic build
+on:
+  push:
+    branches:
+      - firmware/ee04-hardware-integration
+    paths:
+      - 'firmware/lumairie-ee04/**'
+      - '.github/workflows/ee04-display-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  display-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: python -m pip install platformio
+      - name: Check source contracts
+        run: python -m unittest discover -s firmware/lumairie-ee04/tests -p 'test_*.py' -v
+      - name: Compile ED2208 diagnostic
+        working-directory: firmware/lumairie-ee04/display-smoke
+        run: pio run -e ee04_spectra6
+      - name: Export diagnostic binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumairie-ee04-display-diagnostic
+          path: firmware/lumairie-ee04/display-smoke/.pio/build/ee04_spectra6/firmware.bin
+          if-no-files-found: error
