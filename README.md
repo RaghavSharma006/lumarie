@@ -8,8 +8,8 @@ Offline Flutter companion and ESP-IDF candidate firmware for a Spectra 6 E-Ink p
 - Binary protocol: [shared/protocol/README.md](shared/protocol/README.md)
 - Android APK, Windows simulator, checksums and test notes: [deliverables/BUILD_REPORT.md](deliverables/BUILD_REPORT.md) and [deliverables/README_TESTING.md](deliverables/README_TESTING.md)
 
-The app's Demo Mode works without a device and remains clearly separated from real pairing. Physical display output remains disabled until the exact supplier panel and driver documentation is available.
-The Windows simulator starts with `START_WINDOWS.bat` and serves the Flutter Web build only at `http://localhost:8787`. Real-device Wi-Fi transfer and buttonless standby are still unimplemented; see the status report before treating the firmware as hardware-ready.
+The app's Demo Mode works without a device and remains clearly separated from real pairing. The ED2208 hardware display adapter is implemented, but real physical operation has not yet been verified.
+The Windows simulator starts with `START_WINDOWS.bat` and serves the Flutter Web build only at `http://localhost:8787`. The EE04 native app photo-transfer path is now implemented and software-tested in the feature branch, but hardware testing and production security remain outstanding.
 
 ## EE04 Android + firmware hardware preview (2026-11-04)
 
