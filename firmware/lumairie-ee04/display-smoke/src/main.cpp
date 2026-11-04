@@ -1,6 +1,7 @@
 // Physical EE04 screen/QR diagnostic only: not the production BLE firmware.
 // Uses Seeed's original Spectra 6 pipeline (Seeed_GFX, combo 509).
 #include <Arduino.h>
+#include <ctype.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <QRCode.h>
@@ -26,10 +27,18 @@ static bool startsWith(const char *s, const char *prefix) {
     return strncmp(s, prefix, strlen(prefix)) == 0;
 }
 static bool validQr(const char *uri) {
-    if (!startsWith(uri, "lumairie://pair?id=") ||
-        !strstr(uri, "&name=LUMAIRE-") ||
-        !strstr(uri, "&user=") || !strstr(uri, "&secret=")) return false;
-    const char *name = strstr(uri, "&name=LUMAIRE-") + strlen("&name=LUMAIRE-");
+    static constexpr char prefix[] = "lumairie://pair?id=";
+    if (!startsWith(uri, prefix)) return false;
+    const char *id = uri + sizeof(prefix) - 1;
+    const char *nameField = strstr(id, "&name=LUMAIRE-");
+    if (!nameField) return false;
+    size_t idSize = (size_t)(nameField - id);
+    if (idSize < 8 || idSize > 64) return false;
+    for (size_t i = 0; i < idSize; ++i) {
+        char ch = id[i];
+        if (!(isalnum((unsigned char)ch) || ch == '_' || ch == '-')) return false;
+    }
+    const char *name = nameField + strlen("&name=LUMAIRE-");
     for (int n = 0; n < 6; ++n) {
         char c = name[n];
         if (!((c >= '0' && c <= '9') ||
@@ -37,7 +46,16 @@ static bool validQr(const char *uri) {
               (c >= 'a' && c <= 'f'))) return false;
     }
     if (name[6] != '&') return false;
-    return strlen(uri) <= 200;
+    const char *userTag = name + 6;
+    if (strncmp(userTag, "&user=", 6) != 0) return false;
+    const char *user = userTag + 6;
+    const char *secretTag = strstr(user, "&secret=");
+    if (!secretTag) return false;
+    size_t userSize = (size_t)(secretTag - user);
+    size_t secretSize = strlen(secretTag + strlen("&secret="));
+    return userSize >= 1 && userSize <= 64 &&
+           secretSize >= 16 && secretSize <= 128 &&
+           strlen(uri) <= 200;
 }
 static bool loadFactoryQr() {
     nvs_handle_t nvs;
@@ -63,7 +81,7 @@ static void showMissingIdentity() {
 }
 static void showQr() {
     // QRCode by Richard Moore: data buffer size determined by QR version.
-    uint8_t qrData[qrcode_getBufferSize(kQrVersion)];
+    uint8_t qrData[512] = {};  // Version 10 requires 407 bytes
     QRCode qr;
     qrcode_initText(&qr, qrData, kQrVersion, ECC_LOW, qrUri);
     panel.fillScreen(TFT_WHITE);
