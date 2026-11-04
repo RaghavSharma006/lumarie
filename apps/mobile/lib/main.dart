@@ -7,6 +7,8 @@ import 'design_system.dart';
 import 'services/image_pipeline.dart';
 import 'services/mock_frame.dart';
 import 'services/pairing.dart';
+import 'services/frame_wifi_transport_stub.dart'
+    if (dart.library.io) 'services/frame_wifi_transport_io.dart' as physical;
 import 'services/photo_store_web.dart'
     if (dart.library.io) 'services/photo_store_io.dart' as photo;
 
@@ -113,13 +115,15 @@ class _LumairieAppState extends State<LumairieApp> {
   }
 
   Future<void> _send() async {
-    if (!demo) {
-      _notice(pairedName == null
-          ? 'Pair a physical frame before sending.'
-          : 'Secure image transfer needs hardware validation before it can be enabled.');
+    if (!demo && pairedId == null) {
+      _notice('Pair a physical frame before sending.');
       return;
     }
-    if (kIsWeb && !simWifiConnected) {
+    if (!demo && photos.isEmpty) {
+      _notice('Choose a photo before sending to the physical frame.');
+      return;
+    }
+    if (demo && kIsWeb && !simWifiConnected) {
       setState(() {
         simState = 'Disconnected';
         simStatus = 'Wi-Fi is disconnected. The previous image is unchanged.';
@@ -146,37 +150,53 @@ class _LumairieAppState extends State<LumairieApp> {
               focalX: focalX,
               focalY: focalY,
               quarterTurns: quarterTurns);
+      if (!mounted) return;
       setState(() {
         simState = 'Transferring';
         simStatus = 'Sending packed pixels';
       });
-      await mockFrame.transfer(packed,
-          dropAckOnceAt: kIsWeb && simFault == 1 ? 0 : null,
-          corruptChunkAt: kIsWeb && simFault == 2 ? 0 : null,
-          interruptAt: kIsWeb && simFault == 3 ? 256 : null,
-          onProgress: (value, status) {
+      void updateProgress(double fraction, String status) {
         if (mounted) {
           setState(() {
-            sendProgress = value;
+            sendProgress = fraction;
             sendStatus = status;
             simStatus = status;
-            if (value >= .96) simState = 'Verifying';
+            if (fraction >= .96) simState = 'Refreshing';
           });
         }
-      });
-      if (mounted) {
-        setState(() {
-          simState = 'Refreshing';
-          simStatus = 'Rendering six-color display';
-        });
+      }
+      if (demo) {
+        await mockFrame.transfer(packed,
+            dropAckOnceAt: kIsWeb && simFault == 1 ? 0 : null,
+            corruptChunkAt: kIsWeb && simFault == 2 ? 0 : null,
+            interruptAt: kIsWeb && simFault == 3 ? 256 : null,
+            onProgress: updateProgress);
+      } else {
+        final qr = await PairingService().loadPairedCredential(pairedId!);
+        await physical.FrameWifiTransport().send(
+          packed,
+          qr,
+          onProgress: updateProgress,
+        );
+      }
+      if (!mounted) return;
+      if (demo) {
         final preview = ImagePipeline.previewPng(mockFrame.visibleFrame!);
         if (!mounted) return;
         setState(() {
           simPreview = preview;
           simState = 'Standby';
-          simStatus = 'Display refreshed; Wi-Fi power save active';
+          simStatus = 'Demo display refreshed';
         });
         _notice('Demo frame refreshed. Image verified before display.');
+      } else {
+        setState(() {
+          simState = 'Standby';
+          simStatus = 'Physical frame confirmed full ePaper refresh';
+          sendProgress = 1;
+          sendStatus = 'Photo displayed on frame';
+        });
+        _notice('Photo displayed on your physical LUMAIRIE frame.');
       }
     } catch (error) {
       if (mounted) {
