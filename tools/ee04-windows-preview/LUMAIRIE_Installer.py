@@ -53,7 +53,7 @@ def verify_images():
             if hashlib.file_digest(source, "sha256").hexdigest() != hashes[name]:
                 raise ValueError(f"Checksum mismatch: {name}; stop")
     for image in (IMAGES[0], IMAGES[2]):
-        if (ROOT / image).open("rb").read(1) != b"\\xe9":
+        if (ROOT / image).open("rb").read(1) != b"\xe9":
             raise ValueError(f"ESP image header invalid: {image}")
     parts = (ROOT / "partitions.bin").read_bytes()
     table = {}
@@ -89,7 +89,7 @@ def inspect(port, backup_dir):
     output = capture(esptool(port, "flash-id"))
     if not re.search("ESP32[- ]S3", output, re.I):
         raise ValueError("ESP32-S3 not verified; refusing to flash")
-    if not re.search(r"Detected flash size:\\s*16\\s*(?:MB|MiB)", output, re.I):
+    if not re.search(r"Detected flash size:\s*16\s*(?:MB|MiB)", output, re.I):
         raise ValueError("16 MB flash not verified; refusing to flash")
     summary = backup_dir / "eFuses.json"
     run([sys.executable, "-m", "espefuse", "--chip", "esp32s3",
@@ -135,7 +135,7 @@ def main():
         raise ValueError("Incomplete flash backup; aborting")
     with out.open("rb") as source:
         digest = hashlib.file_digest(source, "sha256").hexdigest()
-    (backup_dir / "backup.sha256").write_text(digest + "  FULL-16MB-BACKUP.bin\\n")
+    (backup_dir / "backup.sha256").write_text(digest + "  FULL-16MB-BACKUP.bin\n")
     print(f"BACKUP VERIFIED at {out}. Keep it private (contains credentials).")
     print("WARNING: the next step overwrites bootloader/partition/app sectors.")
     if input("To install, type exactly FLASH (otherwise no changes): ").strip() != "FLASH":
