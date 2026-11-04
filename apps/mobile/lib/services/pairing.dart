@@ -64,5 +64,52 @@ class PairingService {
         }));
   }
 
+
+  /// Provision Wi-Fi using the same factory Security 2 credential used to pair.
+  ///
+  /// This method intentionally does not change the onboarding UI. The existing
+  /// workflow can call it once it has obtained the SSID/password from the user.
+  /// A successful return is the native Espressif provisioning result, not a mock.
+  Future<void> provisionStoredWifi(
+    String deviceId,
+    String ssid,
+    String passphrase,
+  ) async {
+    final saved = await _storage.read(key: 'frame_$deviceId');
+    if (saved == null) {
+      throw StateError('Pair this LUMAIRIE frame before provisioning Wi-Fi.');
+    }
+    final utf8SsidBytes = utf8.encode(ssid);
+    if (utf8SsidBytes.isEmpty || utf8SsidBytes.length > 32) {
+      throw const FormatException('Wi-Fi SSID must contain 1–32 UTF-8 bytes.');
+    }
+    final isOpen = passphrase.isEmpty;
+    final isWpaPassphrase = passphrase.length >= 8 && passphrase.length <= 63;
+    final isHexPsk =
+        RegExp(r'^[a-fA-F0-9]{64} => _storage.delete(key: 'frame_$id');
+}
+).hasMatch(passphrase);
+    if (!(isOpen || isWpaPassphrase || isHexPsk)) {
+      throw const FormatException('Invalid Wi-Fi passphrase length.');
+    }
+    final json = jsonDecode(saved) as Map<String, dynamic>;
+    final name = json['name'] as String;
+    final username = json['user'] as String;
+    final secret = json['secret'] as String;
+    final devices = await _native.scanBleDevices('LUMAIRE-');
+    if (!devices.contains(name)) {
+      throw StateError('Frame not advertising. Hold the frame reset button to re-enter setup.');
+    }
+    final ok = await _native.provisionWifi(
+      name,
+      secret,
+      ssid,
+      passphrase,
+      security: EspSecurityScheme.security2,
+      username: username,
+    );
+    if (!ok) throw StateError('Wi-Fi provisioning was not confirmed.');
+  }
+
   Future<void> forget(String id) => _storage.delete(key: 'frame_$id');
 }
