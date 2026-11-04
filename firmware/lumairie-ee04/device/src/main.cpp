@@ -7,6 +7,7 @@
 #include "identity.h"
 #include "display.h"
 #include "provisioning.h"
+#include "photo_transfer.h"
 
 static constexpr uint8_t BUTTON_KEY0 = 2;  // Seeed EE04 active-low button
 static constexpr uint32_t WIFI_RESET_HOLD_MS = 8000;
@@ -42,6 +43,7 @@ void setup() {
     return;
   }
   identity_ok = true;
+  photo_transfer_begin(identity.ble_name, identity.qr_uri);
   show(FrameState::INITIALIZING);
   if (!provisioning_begin(identity.qr_uri, identity.ble_name)) {
     Serial.println("Security 2 provisioning initialization failed");
@@ -53,6 +55,7 @@ void setup() {
 void loop() {
   if (!identity_ok) { delay(100); return; }
   provisioning_poll();
+  photo_transfer_poll(provisioning_is_connected());
   const uint32_t now = millis();
   bool held = digitalRead(BUTTON_KEY0) == LOW;
   if (!held) { pressed_since = 0; reset_consumed = false; }
@@ -63,6 +66,8 @@ void loop() {
     provisioning_reset_wifi();
   }
   FrameState next = provisioning_state();
-  if (next != displayed && now - refreshed_at > PANEL_REFRESH_GAP_MS) show(next);
+  // Never overwrite a successfully displayed photo with a transient status UI.
+  if (!photo_transfer_has_photo() && next != displayed &&
+      now - refreshed_at > PANEL_REFRESH_GAP_MS) show(next);
   delay(50);
 }

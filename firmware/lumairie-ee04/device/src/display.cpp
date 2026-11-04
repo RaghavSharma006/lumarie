@@ -60,3 +60,42 @@ void display_state(FrameState state, const char *name, const char *uri) {
   panel.update();
   panel.sleep();
 }
+
+
+bool display_photo(const uint8_t *pixels, uint16_t width, uint16_t height) {
+  if (!ready || !pixels ||
+      !((width == 800 && height == 480) ||
+        (width == 480 && height == 800))) return false;
+
+  // Input indices are LUMAIRIE app's established six-color nibble format.
+  // Seeed_GFX's ED2208 driver supports these exact six TFT_* colors.
+  static const uint16_t palette[6] = {
+    TFT_WHITE, TFT_BLACK, TFT_RED, TFT_YELLOW, TFT_BLUE, TFT_GREEN
+  };
+  // Full ePaper refresh is allowed ONLY after the caller validates length
+  // and CRC32 of the complete staging frame.
+  panel.begin();
+  panel.setRotation(0);
+  for (uint32_t y = 0; y < height; ++y) {
+    for (uint32_t x = 0; x < width; ++x) {
+      const uint32_t index = y * width + x;
+      const uint8_t packed = pixels[index >> 1];
+      const uint8_t color = (index & 1) ? packed & 0x0f : packed >> 4;
+      if (color > 5) {
+        // Reject unsupported palette indices: never start hardware refresh.
+        return false;
+      }
+      if (width == 800) {
+        panel.drawPixel(x, y, palette[color]);
+      } else {
+        // Portrait 480x800 stream -> physical landscape 800x480 raster.
+        panel.drawPixel(y, 479 - x, palette[color]);
+      }
+    }
+    if ((y & 15) == 0) yield();
+  }
+  // Seeed_GFX update() waits for BUSY, then enters panel sleep.
+  panel.update();
+  panel.sleep();
+  return true;
+}
