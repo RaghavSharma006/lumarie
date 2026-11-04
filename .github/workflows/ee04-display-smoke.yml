@@ -5,7 +5,8 @@ on:
       - firmware/ee04-hardware-integration
     paths:
       - 'firmware/lumairie-ee04/**'
-      - 'apps/mobile/lib/services/pairing.dart'
+      - 'apps/mobile/lib/services/**'
+      - 'apps/mobile/test/frame_wifi_transport_test.dart'
       - 'apps/mobile/lib/main.dart'
       - '.github/workflows/ee04-display-smoke.yml'
   pull_request:
@@ -64,7 +65,7 @@ jobs:
         run: flutter pub get
       - name: Analyze modified app source
         working-directory: apps/mobile
-        run: flutter analyze --no-pub lib/main.dart lib/services/pairing.dart
+        run: flutter analyze --no-pub lib
       - name: Existing pairing tests
         working-directory: apps/mobile
-        run: flutter test test/pairing_test.dart
+        run: flutter test test/pairing_test.dart test/frame_wifi_transport_test.dart
