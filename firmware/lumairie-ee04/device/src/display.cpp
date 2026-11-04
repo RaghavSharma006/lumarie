@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <QRCode.h>
+#include <qrcode.h>
 #include "driver.h"
 #include "TFT_eSPI.h"
 #include "display.h"

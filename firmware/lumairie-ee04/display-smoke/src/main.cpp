@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include <nvs.h>
 #include <nvs_flash.h>
-#include <QRCode.h>
+#include <qrcode.h>
 #include "driver.h"
 #include "TFT_eSPI.h"
 
