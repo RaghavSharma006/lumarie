@@ -3,12 +3,14 @@ on:
   push:
     branches:
       - firmware/ee04-hardware-integration
+      - feature/ee04-photo-transfer
     paths:
       - 'firmware/lumairie-ee04/**'
       - 'apps/mobile/lib/services/**'
       - 'apps/mobile/test/frame_wifi_transport_test.dart'
       - 'apps/mobile/lib/main.dart'
       - '.github/workflows/ee04-display-smoke.yml'
+      - 'docs/RELEASE_EE04_PREVIEW.md'
   pull_request:
     paths:
       - 'firmware/lumairie-ee04/**'
@@ -78,3 +80,71 @@ jobs:
           name: lumairie-photo-transfer-android-test-apk
           path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+  publish-preview:
+    # Publication is only allowed from the owner's explicit source branch;
+    # never publish third-party pull request code or a failing CI build.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/ee04-photo-transfer'
+    needs: [firmware, flutter-protocol]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v0.2.0-ee04-preview.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch tested Android APK from this CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: lumairie-photo-transfer-android-test-apk
+          path: release/android
+      - name: Fetch tested bootloader, partitions, and app from this CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: lumairie-ee04-flash-images
+          path: release/flash
+      - name: Assemble preview and SHA256 integrity manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/android/app-release.apk
+          test -s release/flash/bootloader.bin
+          test -s release/flash/partitions.bin
+          test -s release/flash/firmware.bin
+          mkdir -p release/out
+          cp release/android/app-release.apk release/out/LUMAIRIE-Android-EE04-PREVIEW.apk
+          cp docs/RELEASE_EE04_PREVIEW.md release/flash/READ_ME_FIRST.md
+          (
+            cd release/flash
+            sha256sum bootloader.bin partitions.bin firmware.bin > SHA256-FLASH-FILES.txt
+            zip -9 -q ../out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
+              bootloader.bin partitions.bin firmware.bin READ_ME_FIRST.md SHA256-FLASH-FILES.txt
+          )
+          (
+            cd release/out
+            sha256sum LUMAIRIE-Android-EE04-PREVIEW.apk \
+              LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip > SHA256SUMS.txt
+          )
+      - name: Publish GitHub prerelease, not a production release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              release/out/LUMAIRIE-Android-EE04-PREVIEW.apk \
+              release/out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
+              release/out/SHA256SUMS.txt \
+              --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$RELEASE_TAG" --prerelease \
+              --notes-file docs/RELEASE_EE04_PREVIEW.md --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" \
+              release/out/LUMAIRIE-Android-EE04-PREVIEW.apk \
+              release/out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
+              release/out/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
+              --title "LUMAIRIE EE04 Android + ESP32-S3 Photo Transfer (Hardware Preview)" \
+              --notes-file docs/RELEASE_EE04_PREVIEW.md \
+              --prerelease --repo "$GITHUB_REPOSITORY"
+          fi
