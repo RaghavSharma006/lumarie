@@ -11,7 +11,7 @@
 
 // The UUID is inherited verbatim from firmware/main/main.c.
 // Characteristic discovery follows the standard Espressif protocomm descriptors.
-static const uint8_t service_uuid[16] = {
+static uint8_t service_uuid[16] = {
   0x2a,0x3f,0x17,0xc9,0x72,0x85,0x40,0x42,
   0x8d,0x55,0x30,0x1a,0x40,0x61,0x19,0x10
 };
@@ -137,7 +137,7 @@ bool provisioning_begin(const char *qr_uri, const char *ble_name) {
   if (network_prov_mgr_init(config) != ESP_OK) return false;
   manager_ready = true;
   if (network_prov_mgr_endpoint_create("frame") != ESP_OK) return false;
-  network_prov_scheme_ble_set_service_uuid(const_cast<uint8_t *>(service_uuid));
+  network_prov_scheme_ble_set_service_uuid(service_uuid);
   // sec2 is static, not a temporary local struct; the verifier stays live.
   if (network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_2, &sec2,
                                           ble_name, nullptr) != ESP_OK) return false;
