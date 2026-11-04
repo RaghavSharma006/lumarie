@@ -85,7 +85,7 @@ jobs:
   publish-preview:
     # Publication is only allowed from the owner's explicit source branch;
     # never publish third-party pull request code or a failing CI build.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/ee04-photo-transfer'
+    if: github.event_name == 'pull_request' && github.head_ref == 'feature/ee04-photo-transfer' && github.event.pull_request.head.repo.full_name == github.repository
     needs: [firmware, flutter-protocol]
     runs-on: ubuntu-latest
     permissions:
@@ -148,7 +148,7 @@ jobs:
               release/out/LUMAIRIE-Android-EE04-PREVIEW.apk \
               release/out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
               release/out/SHA256SUMS.txt \
-              --target "$GITHUB_SHA" \
+              --target "${{ github.event.pull_request.head.sha }}" \
               --title "LUMAIRIE EE04 Android + ESP32-S3 Photo Transfer (Hardware Preview)" \
               --notes-file docs/RELEASE_EE04_PREVIEW.md \
               --prerelease --repo "$GITHUB_REPOSITORY"
