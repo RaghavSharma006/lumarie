@@ -1,41 +1,129 @@
-# LUMAIRIE EE04 integration — work in progress
+# LUMAIRIE XIAO EE04 V1.4 firmware — integration branch
 
-**This is not finished production firmware and must not be used as a pairing-ready release.**
+**Status: source integrated, build/flash/hardware validation NOT complete.** The
+source code is real, not a BLE simulator. Do not ship or flash over a working
+device until the 16 MB partition layout and Security 2 compatibility are verified.
 
-The existing Flutter app is the protocol source of truth:
-- QR: `lumairie://pair?id=<8..64 alnum/_/->&name=LUMAIRE-<6 hex>&user=<username>&secret=<secret>`.
-- Scan prefix `LUMAIRE-`; Espressif `esp_provisioning_wifi` Security 2 (SRP6a/AES-GCM), custom endpoint `frame`, `PING` -> `{"protocol":1}`.
-- The existing app **does not submit Wi-Fi credentials**: `apps/mobile/lib/services/pairing.dart` calls `scanBleDevices` and `fetchCustomData` only. Do not invent an app Wi-Fi API.
-- The older `firmware/` project is an ESP32-C3 candidate. It is *not* the EE04 production firmware and `mock_display_refresh` does not energize a display.
+## Projects
 
-## Hardware verified upstream
-- Seeed EE04 V1.4/XIAO ESP32-S3 Plus; 50-pin FPC set by hardware jumper.
-- Seeed_GFX `BOARD_SCREEN_COMBO=509`: ED2208, 7.3-inch Spectra 6, 800 × 480.
-- `USE_XIAO_EPAPER_DISPLAY_BOARD_EE04` selects Seeed's own pin map, power and initialization sequence. No raw SPI GPIO map is fabricated.
-- KEY0 GPIO2, KEY1 GPIO3, KEY2 GPIO5 (active low).
-- XIAO ESP32-S3 Plus: 16 MB flash, 8 MB PSRAM (enable Octal PSRAM).
-- Seeed PlatformIO instructions use `seeed-xiao-esp32-s3-sense` and `qio_opi` memory settings for EE0x boards; validate on actual Plus hardware.
+- `device/` — combined EE04 firmware: ESP32-S3 Plus, Seeed_GFX ED2208
+  Spectra 6, per-device QR on 800×480 ePaper, ESP Unified BLE provisioning,
+  Wi-Fi events, NVS configuration and KEY0 recovery.
+- `display-smoke/` — separate low-level display diagnostic, NOT the device
+  provisioning firmware. Only use it to isolate a display hardware problem.
+- `tests/` — offline app/firmware source-contract checks.
+- `firmware/main/` — older ESP32-C3 candidate, not the EE04 build.
 
-## Display diagnostic (NOT BLE provisioning)
-`display-smoke/` is a *standalone flashable project* using the official Seeed_GFX driver and ricmoo QRCode. It displays the exact QR URI supplied in NVS namespace `factory`, key `qr_uri` (string). It does not generate a fake identity, embed a universal secret, operate BLE, or configure Wi-Fi. Missing credentials are displayed as an error. It neither prints nor transmits QR secrets.
+## Verified hardware
 
-Before this can display a real pairing QR, manufacturing/provisioning must install a unique `qr_uri` for the board and the matching Security-2 SRP salt/verifier for the *application firmware*. Do not commit secrets to Git or use sample QR credentials. Protect factory NVS with flash encryption on shipping units; the existing firmware expects `factory/srp_salt` and `factory/srp_verifier`. **Writing a qr_uri alone does not enable pairing.** These two components are not yet merged into one running firmware image.
+- Board: XIAO ESP32-S3 Plus on Seeed EE04 V1.4; 16 MB flash, 8 MB PSRAM.
+- Select 50-pin panel jumper per [Seeed EE04 wiki](https://wiki.seeedstudio.com/epaper_ee04/).
+- Seeed_GFX `BOARD_SCREEN_COMBO=509`: 7.3-inch ED2208 Spectra 6, 800x480.
+- EE04 KEY0 is active-low GPIO2. An eight-second press forgets **only**
+  Wi-Fi settings; it never erases the whole flash or the QR/SRP factory data.
+- The PlatformIO configuration selects Seeed's exact `seeed-xiao-esp32-s3-plus`
+  board, `qio_opi` PSRAM and a 16 MB Arduino partition layout.
 
-### Build (only in an environment with PlatformIO + Seeed platform access)
-```sh
-cd firmware/lumairie-ee04/display-smoke
-pio run -e ee04_spectra6
+## Source-of-truth BLE/QR protocol
+
+This project DOES NOT introduce a new BLE UUID or JSON provisioning scheme.
+The existing Flutter app's `PairingCredential.parse` accepts:
+
+```text
+lumairie://pair?id=<8..64 alnum_->&name=LUMAIRE-<6 uppercase HEX>&user=<username>&secret=<16..128 chars>
 ```
-The environment used for this commit has no PlatformIO or ESP-IDF installation and no outbound network access. **This has not been compiled**. The expected output is `.pio/build/ee04_spectra6/firmware.bin` only after a successful build.
 
-### USB flash — only after explicit backup/approval
-1. Confirm your physical panel is 7.3-inch Spectra 6 ED2208, not Seeed's 7.5-inch monochrome panel, and verify the 50-pin jumper.
-2. Backup any existing firmware and NVS (including encryption/partition metadata) before flashing. Flashing a different partition table or application may make existing credentials inaccessible or replace the current app.
-3. Connect XIAO ESP32-S3 Plus using a data-capable USB-C cable. Locate the serial port. If needed, enter ROM download mode using Seeed's BOOT/RESET instructions.
-4. Only when ready to replace the currently installed application, run `pio run -e ee04_spectra6 -t upload --upload-port <PORT>`. Monitor with `pio device monitor -b 115200`. **Do not run `erase_flash` or `idf.py erase-flash`**.
-5. Expect the branded pairing QR only if a valid factory NVS `qr_uri` was preinstalled. KEY0 (GPIO2) redraws without clearing NVS.
+The firmware generates a stable per-device URI on a clean first boot, using
+ESP32 hardware randomness, and stores it under `factory/qr_uri` in NVS. The
+same random secret is used to generate `factory/srp_salt` and
+`factory/srp_verifier` using Espressif's `esp_srp_gen_salt_verifier`. On later
+boots it loads those values rather than changing the QR. If a partial/invalid
+factory identity exists, setup fails closed rather than overwriting credentials.
 
-## Blocking integration work
-- Merge the display driver/QR screen into an ESP32-S3 firmware that includes the current protocomm Security 2 `frame` endpoint and consistent NVS credential lifecycle (two standalone flash images cannot operate at once).
-- Integrate actual ESP-IDF Wi-Fi provisioning with persistent status reporting. The current app exposes no Wi-Fi-credential submission call, so end-to-end Wi-Fi onboarding cannot be completed without an *existing* app path being identified or a separately approved minimal compatibility change.
-- Compile for physical hardware, resolve dependency/API errors, verify the GATT endpoint/security handshake, panel refresh, QR scanning, successful Wi-Fi DHCP, failure recovery and physical reset behavior. No physical tests have been performed.
+**Security note:** This development build stores the QR URI in NVS so it can
+be redrawn. Production units should enable flash/NVS encryption and secure
+boot under an audited manufacturing/recovery policy. Do not automatically
+burn eFuses or enable irreversible security options without an explicit plan.
+
+BLE advertisement: `LUMAIRE-%02X%02X%02X` (Bluetooth MAC suffix). The 128-bit
+service UUID is the same byte array as `firmware/main/main.c`. GATT endpoints
+use Espressif's standard network_provisioning/protocomm scheme, with the
+authenticated custom endpoint `frame` (`PING` -> `{"protocol":1}`).
+ESP-IDF Security 2 protects all sessions with SRP6a + AES-GCM; no passwords are
+logged. The standard `prov-config`, `prov-scan` and `prov-session` GATT
+endpoints handle actual Wi-Fi provisioning; these are not custom mocks.
+
+The Flutter pairing service now also exposes
+`provisionStoredWifi(deviceId, ssid, passphrase)`, and the existing
+"Connecting your frame" screen invokes it from a small Wi-Fi dialog after
+pairing. It uses the encrypted per-device credential already stored on the
+phone. There is no new app or backend.
+
+## Real provisioning and display states
+
+The event path transitions between BOOTING, INITIALIZING, WAITING_FOR_SETUP,
+BLE_CONNECTED, CONFIGURING_WIFI, CONNECTING_WIFI, WIFI_CONNECTED,
+PROVISIONING_FAILED, and NORMAL_OPERATION. The device considers Wi-Fi
+connected **only after IP_EVENT_STA_GOT_IP**, not after simply receiving the
+password. Failed connections display an error and the ESP provisioning
+state machine can retry. A successful connection replaces the QR with
+CONNECTED. Wi-Fi configuration uses ESP-IDF NVS flash storage.
+
+The Spectra 6 panel needs a relatively long full refresh. State updates are
+coalesced with a minimum five-second interval; very short transient states
+may not appear individually on ePaper. Do not interpret that as a fake event.
+
+## Build, artifacts and USB-C flash
+
+Requires working PlatformIO and Seeed's platform and libraries (internet
+access needed for first dependency install). On a development machine:
+
+```sh
+git checkout firmware/ee04-hardware-integration
+python -m pip install -U platformio
+python -m unittest discover -s firmware/lumairie-ee04/tests -p 'test_*.py' -v
+cd firmware/lumairie-ee04/device
+pio run -e ee04
+```
+
+Expected build output *after compilation succeeds*:
+`device/.pio/build/ee04/firmware.bin`. The repository CI workflow attempts
+the same build and uploads the binary as a GitHub Actions artifact after
+success. **No compiled binary or passing CI run has been confirmed in the
+current environment.**
+
+**Before flashing**, confirm a 7.3-inch ED2208 Spectra 6 panel, 50-pin
+jumper, Plus MCU, 16 MB capacity, and a USB-C DATA cable. Back up existing
+firmware, partition table, factory NVS and eFuse encryption state securely.
+Flashing a changed partition table/application can make existing firmware
+unbootable or factory data inaccessible. Do not run `erase_flash`.
+Once you explicitly approve replacing the installed firmware, use:
+
+```sh
+pio run -e ee04 -t upload --upload-port <SERIAL_PORT>
+pio device monitor -b 115200 --port <SERIAL_PORT>
+```
+
+For a blank board, the normal PlatformIO upload writes the bootloader,
+partition table and app as required; a single app `firmware.bin` is not
+sufficient by itself. See Seeed's bootloader/BOOT+RESET entry instructions
+if the port is not detected. Do not auto-erase flash.
+
+## Validation still required
+
+1. Compile/link on Seeed's PlatformIO platform and fix any version-specific
+   framework/include/driver errors.
+2. Verify Arduino ESP32 3.3.x's `network_provisioning` Security 2 GCM IV
+   compatibility with the Flutter plugin on BOTH Android and iOS. A known
+   upstream version mismatch may require a newer provisioning component.
+3. Flash only after backup/confirmation and test 50-pin ePaper power sequence,
+   first-boot QR, contrast/scanning, BLE discovery and authenticated `PING`.
+4. Submit valid/invalid Wi-Fi credentials; verify real DHCP status, restart
+   persistence, fail/retry behavior, and eight-second KEY0 Wi-Fi-only reset.
+5. Enable/validate flash encryption, production credentials and ownership reset
+   policy before deployment. Image-transfer and OTA functions from the old
+   candidate firmware are NOT carried over; the existing app still disables
+   live photo transfer and uses a simulator for image frames.
+
+Never interpret source-level contract tests or a rendered diagnostic as
+confirmation of successful provisioning on the actual EE04 board.
