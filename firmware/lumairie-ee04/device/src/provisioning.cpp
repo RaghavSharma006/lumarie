@@ -75,8 +75,8 @@ static bool load_srp() {
   }
   nvs_close(handle);
   if (!ok) { free(salt); free(verifier); salt = verifier = nullptr; return false; }
-  sec2.salt = salt; sec2.salt_len = salt_length;
-  sec2.verifier = verifier; sec2.verifier_len = verifier_length;
+  sec2.salt = reinterpret_cast<const char *>(salt); sec2.salt_len = salt_length;
+  sec2.verifier = reinterpret_cast<const char *>(verifier); sec2.verifier_len = verifier_length;
   return true;
 }
 static void event_handler(void *ctx, esp_event_base_t base, int32_t id, void *data) {
@@ -155,7 +155,7 @@ void provisioning_poll() {
       millis() - connection_start > 45000) state = FrameState::PROVISIONING_FAILED;
   if (failed && manager_ready) {
     // Restore the manager state machine so the phone can retry.
-    if (network_prov_mgr_reset_sm_state_on_failure() == ESP_OK) failed = false;
+    if (network_prov_mgr_reset_wifi_sm_state_on_failure() == ESP_OK) failed = false;
   }
 }
 void provisioning_reset_wifi() {
