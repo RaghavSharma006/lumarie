@@ -2,6 +2,7 @@
 // No fake success acknowledgments; requires per-unit manufactured QR + SRP verifier.
 #include <Arduino.h>
 #include <nvs_flash.h>
+#include <WiFi.h>
 #include "driver.h"
 #include "identity.h"
 #include "display.h"
@@ -33,6 +34,8 @@ void setup() {
     show(FrameState::PROVISIONING_FAILED);
     return;
   }
+  // Radio-on entropy before generating the first-boot SRP secret.
+  WiFi.mode(WIFI_STA);
   if (!factory_identity_load(&identity)) {
     Serial.println("Factory QR missing, invalid, or mismatched to BT MAC; BLE disabled");
     show(FrameState::PROVISIONING_FAILED);
