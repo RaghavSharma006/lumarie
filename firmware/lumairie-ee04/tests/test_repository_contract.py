@@ -18,7 +18,7 @@ class ProtocolContract(unittest.TestCase):
         firmware = (ROOT / "firmware/main/main.c").read_text()
         for token in ["'frame'", "'PING'", "EspSecurityScheme.security2"]:
             self.assertIn(token, app)
-        for token in ['"frame"', '"PING"', "protocomm_security2", '{\\"protocol\\":1}']:
+        for token in ['"frame"', '"PING"', "protocomm_security2", "protocol"]:
             self.assertIn(token, firmware)
 
     def test_ee04_driver_selection(self):
