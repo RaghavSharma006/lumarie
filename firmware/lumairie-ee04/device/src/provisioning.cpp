@@ -19,6 +19,8 @@ static volatile FrameState state = FrameState::BOOTING;
 static volatile bool connected = false;
 static volatile bool failed = false;
 static bool manager_ready = false;
+static uint32_t connected_at = 0;
+static uint32_t connection_start = 0;
 static uint8_t *salt = nullptr;
 static uint8_t *verifier = nullptr;
 static network_prov_security2_params_t sec2 = {};
@@ -86,14 +88,16 @@ static void event_handler(void *ctx, esp_event_base_t base, int32_t id, void *da
         // event_data holds the Wi-Fi password. Do not print or store it here.
         state = FrameState::CONFIGURING_WIFI; break;
       case NETWORK_PROV_WIFI_CRED_SUCCESS:
-        // Connected result is displayed only after actual DHCP/IP_EVENT.
-        state = FrameState::CONNECTING_WIFI; break;
+        // The manager may report success after DHCP. Do not regress the state.
+        if (!connected) state = FrameState::CONNECTING_WIFI;
+        break;
       case NETWORK_PROV_WIFI_CRED_FAIL:
         failed = true; state = FrameState::PROVISIONING_FAILED; break;
       default: break;
     }
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-    connected = true; failed = false; state = FrameState::WIFI_CONNECTED;
+    connected = true; failed = false; connected_at = millis();
+    state = FrameState::WIFI_CONNECTED;
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
     connected = false;
     if (!failed) state = FrameState::CONNECTING_WIFI;
@@ -121,6 +125,7 @@ bool provisioning_begin(const char *qr_uri, const char *ble_name) {
   wifi_config_t saved = {};
   if (esp_wifi_get_config(WIFI_IF_STA, &saved) == ESP_OK && saved.sta.ssid[0]) {
     state = FrameState::CONNECTING_WIFI;
+    connection_start = millis();
     WiFi.begin(); // ESP-IDF NVS settings; never log the password
     return true;
   }
@@ -144,6 +149,10 @@ bool provisioning_begin(const char *qr_uri, const char *ble_name) {
   return true;
 }
 void provisioning_poll() {
+  if (connected && state == FrameState::WIFI_CONNECTED &&
+      millis() - connected_at > 20000) state = FrameState::NORMAL_OPERATION;
+  if (!connected && !manager_ready && state == FrameState::CONNECTING_WIFI &&
+      millis() - connection_start > 45000) state = FrameState::PROVISIONING_FAILED;
   if (failed && manager_ready) {
     // Restore the manager state machine so the phone can retry.
     if (network_prov_mgr_reset_sm_state_on_failure() == ESP_OK) failed = false;
