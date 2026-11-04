@@ -85,10 +85,7 @@ class PairingService {
     }
     final isOpen = passphrase.isEmpty;
     final isWpaPassphrase = passphrase.length >= 8 && passphrase.length <= 63;
-    final isHexPsk =
-        RegExp(r'^[a-fA-F0-9]{64} => _storage.delete(key: 'frame_$id');
-}
-).hasMatch(passphrase);
+    final isHexPsk = RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(passphrase);
     if (!(isOpen || isWpaPassphrase || isHexPsk)) {
       throw const FormatException('Invalid Wi-Fi passphrase length.');
     }
