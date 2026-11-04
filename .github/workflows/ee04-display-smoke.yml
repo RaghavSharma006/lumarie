@@ -11,6 +11,7 @@ on:
       - 'apps/mobile/lib/main.dart'
       - '.github/workflows/ee04-display-smoke.yml'
       - 'docs/RELEASE_EE04_PREVIEW.md'
+      - 'tools/ee04-windows-preview/**'
   pull_request:
     paths:
       - 'firmware/lumairie-ee04/**'
@@ -104,6 +105,8 @@ jobs:
         with:
           name: lumairie-ee04-flash-images
           path: release/flash
+      - name: Validate Windows uploader Python source
+        run: python -m py_compile tools/ee04-windows-preview/LUMAIRIE_Installer.py
       - name: Assemble preview and SHA256 integrity manifest
         shell: bash
         run: |
@@ -115,11 +118,13 @@ jobs:
           mkdir -p release/out
           cp release/android/app-release.apk release/out/LUMAIRIE-Android-EE04-PREVIEW.apk
           cp docs/RELEASE_EE04_PREVIEW.md release/flash/READ_ME_FIRST.md
+          cp tools/ee04-windows-preview/LUMAIRIE_Installer.py release/flash/LUMAIRIE_Installer.py
+          cp tools/ee04-windows-preview/START_LUMAIRIE_WINDOWS.bat release/flash/START_LUMAIRIE_WINDOWS.bat
           (
             cd release/flash
             sha256sum bootloader.bin partitions.bin firmware.bin > SHA256-FLASH-FILES.txt
             zip -9 -q ../out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
-              bootloader.bin partitions.bin firmware.bin READ_ME_FIRST.md SHA256-FLASH-FILES.txt
+              bootloader.bin partitions.bin firmware.bin READ_ME_FIRST.md SHA256-FLASH-FILES.txt LUMAIRIE_Installer.py START_LUMAIRIE_WINDOWS.bat
           )
           (
             cd release/out
