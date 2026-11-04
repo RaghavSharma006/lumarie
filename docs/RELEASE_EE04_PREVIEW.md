@@ -14,12 +14,31 @@ guaranteed to run on an unverified display assembly.
 - `LUMAIRIE-Android-EE04-PREVIEW.apk`: an Android hardware-test APK
   **signed with the development/debug certificate**, not a production app
 - `LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip`: official PlatformIO-built
-  bootloader, partitions, and firmware plus safe instructions
+  bootloader, partitions, and firmware, a backup-first Windows launcher
+  (`START_LUMAIRIE_WINDOWS.bat`), and safety instructions
 - `SHA256SUMS.txt`: file integrity hashes
 
 **Never flash the old pre-photo-transfer firmware** if you intend to test
 sending photographs. The updated source branch is
 `feature/ee04-photo-transfer`.
+
+## Beginner Windows installation
+1. Download the two GitHub Release assets (Android APK and EE04 flash ZIP).
+2. On Windows, extract the flash ZIP and double-click
+   `START_LUMAIRIE_WINDOWS.bat`. Install Python 3.11+ only if prompted.
+3. Read the safety warnings, check the **50 PIN** jumper while unplugged,
+   select the actual XIAO ESP32-S3 Plus USB COM port and verify its chip and
+   security state.
+4. Let the installer back up all 16 MB of existing flash. Store the backup
+   privately; it may contain passwords and QR credentials.
+5. Only if the board is the exact verified EE04 target and you agree to
+   replace installed bootloader/partitions, type `FLASH` at the final prompt.
+6. Install the APK on an Android test phone, pair, provision Wi-Fi and send
+   a photo on the same trusted LAN.
+
+The Windows uploader has source-level checks, but it has **not** been run on
+the user's physical Windows PC; it refuses operations when verification
+information is missing.
 
 ## Flashing
 - Prior to flashing, inspect jumper/cable, back up the existing **entire
