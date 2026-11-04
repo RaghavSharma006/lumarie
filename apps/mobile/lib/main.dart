@@ -48,7 +48,10 @@ class _LumairieAppState extends State<LumairieApp> {
   String simStatus = 'Waiting for a photo';
   Uint8List? simPreview;
   String? pairedName;
+  String? pairedId;
   String? pairingError;
+  bool wifiProvisionBusy = false;
+  bool wifiProvisionedHere = false;
 
   @override
   void initState() {
@@ -71,6 +74,7 @@ class _LumairieAppState extends State<LumairieApp> {
       dark = prefs.getBool('dark') ?? false;
       demo = prefs.getBool('demo') ?? true;
       pairedName = prefs.getString('pairedName');
+      pairedId = prefs.getString('pairedId');
       photos.addAll(savedPhotos);
       hubMode = prefs.getInt('hubMode') ?? 0;
       if (prefs.containsKey('enabledWidgets')) {
@@ -206,9 +210,11 @@ class _LumairieAppState extends State<LumairieApp> {
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pairedName', qr.name);
+      await prefs.setString('pairedId', qr.id);
       await prefs.setBool('demo', false);
       setState(() {
         pairedName = qr.name;
+        pairedId = qr.id;
         pairingBusy = false;
         demo = false;
       });
@@ -219,6 +225,61 @@ class _LumairieAppState extends State<LumairieApp> {
         pairingBusy = false;
         pairingError = error.toString();
       });
+    }
+  }
+
+  /// Uses the existing pairing screen and Espressif Security 2 session.
+  /// No credentials are saved in preferences or sent to a backend.
+  Future<void> _configurePairedWifi() async {
+    final id = pairedId;
+    if (id == null || wifiProvisionBusy) return;
+    final ssidController = TextEditingController();
+    final passwordController = TextEditingController();
+    final values = await showDialog<List<String>>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Connect frame to Wi-Fi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: ssidController,
+              decoration: const InputDecoration(labelText: 'Wi-Fi network (SSID)'),
+            ),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Wi-Fi password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(
+              dialog, [ssidController.text, passwordController.text]),
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+    ssidController.dispose();
+    passwordController.dispose();
+    if (values == null || !mounted) return;
+    setState(() => wifiProvisionBusy = true);
+    try {
+      await PairingService().provisionStoredWifi(id, values[0], values[1]);
+      if (!mounted) return;
+      setState(() => wifiProvisionedHere = true);
+      _notice('Frame confirmed connection to Wi-Fi.');
+    } catch (error) {
+      if (!mounted) return;
+      _notice('Wi-Fi provisioning failed: $error');
+    } finally {
+      if (mounted) setState(() => wifiProvisionBusy = false);
     }
   }
 
@@ -904,14 +965,20 @@ class _LumairieAppState extends State<LumairieApp> {
         const SizedBox(height: 35),
         _step(p, demo || pairedName != null, 'Frame found',
             demo ? 'Demo frame' : pairedName ?? 'Scan QR to find frame'),
-        _step(p, false, 'Joining Wi-Fi',
-            'Optional · skipped for BLE-only pairing'),
+        _step(p, wifiProvisionedHere, 'Joining Wi-Fi',
+            wifiProvisionedHere ? 'Connected successfully' : 'Connect after scanning the frame QR'),
         _step(p, false, 'Syncing your display',
             'Requires physical pairing window'),
         const SizedBox(height: 24),
         if (pairingError != null)
           Text(pairingError!,
               style: TextStyle(color: p.foreground, fontSize: 11)),
+        if (!demo && pairedId != null) ...[
+          PrimaryButton(
+            label: wifiProvisionBusy ? 'Connecting to Wi-Fi…' : 'Connect to Wi-Fi',
+            onTap: wifiProvisionBusy ? null : _configurePairedWifi),
+          const SizedBox(height: 12),
+        ],
         PrimaryButton(
             label: demo
                 ? 'Open demo frame'
