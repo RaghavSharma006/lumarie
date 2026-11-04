@@ -681,7 +681,8 @@ class _LumairieAppState extends State<LumairieApp> {
         const SizedBox(height: 21),
         Text('Sending to', style: Design.caption(p, muted: true)),
         const SizedBox(height: 4),
-        Text(hallway ? 'Hallway · 10”' : 'Living room · 13”',
+        Text(!demo ? '${pairedName ?? 'LUMAIRIE'} · 7.3”' :
+            hallway ? 'Hallway · 10”' : 'Living room · 13”',
             style: Design.title(p, size: 21)),
         const SizedBox(height: 16),
         Surface(
@@ -740,7 +741,8 @@ class _LumairieAppState extends State<LumairieApp> {
         PrimaryButton(
             label: sending
                 ? 'Sending…'
-                : 'Send to ${hallway ? 'Hallway' : 'Living room'}',
+                : !demo ? 'Send to LUMAIRIE frame' :
+                    'Send to ${hallway ? 'Hallway' : 'Living room'}',
             onTap: sending ? null : _send),
         const SizedBox(height: 10),
         TextButton(
