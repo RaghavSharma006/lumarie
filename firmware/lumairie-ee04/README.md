@@ -1,6 +1,6 @@
 # LUMAIRIE XIAO EE04 V1.4 firmware — integration branch
 
-**Status: source integrated, build/flash/hardware validation NOT complete.** The
+**Status: CI compilation and Flutter pairing checks passed; physical hardware testing NOT complete.** The
 source code is real, not a BLE simulator. Do not ship or flash over a working
 device until the 16 MB partition layout and Security 2 compatibility are verified.
 
@@ -87,10 +87,14 @@ pio run -e ee04
 ```
 
 Expected build output *after compilation succeeds*:
-`device/.pio/build/ee04/firmware.bin`. The repository CI workflow attempts
-the same build and uploads the binary as a GitHub Actions artifact after
-success. **No compiled binary or passing CI run has been confirmed in the
-current environment.**
+`device/.pio/build/ee04/firmware.bin`. The repository CI workflow
+successfully compiled the integrated application and the standalone diagnostic,
+ran eight offline firmware protocol tests, passed Flutter analyzer and the
+existing pairing test. It uploaded `lumairie-ee04-integrated-firmware` and
+`lumairie-ee04-flash-images` artifacts; the latter includes `bootloader.bin`,
+`partitions.bin` and `firmware.bin`. See the passing
+[GitHub Actions run](https://github.com/RaghavSharma006/lumarie/actions/runs/41820883985).
+**No real EE04 display, BLE or Wi-Fi hardware test has been performed.**
 
 **Before flashing**, confirm a 7.3-inch ED2208 Spectra 6 panel, 50-pin
 jumper, Plus MCU, 16 MB capacity, and a USB-C DATA cable. Back up existing
