@@ -69,3 +69,12 @@ jobs:
       - name: Existing pairing tests
         working-directory: apps/mobile
         run: flutter test test/pairing_test.dart test/frame_wifi_transport_test.dart
+      - name: Build Android hardware-test APK
+        working-directory: apps/mobile
+        run: flutter build apk --release
+      - name: Upload Android hardware-test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumairie-photo-transfer-android-test-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
