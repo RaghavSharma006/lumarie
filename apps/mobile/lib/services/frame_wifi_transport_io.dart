@@ -20,6 +20,12 @@ typedef FrameSendProgress = void Function(double fraction, String message);
 /// Wi-Fi image bytes are not encrypted at the application layer: production
 /// deployment should use an audited AEAD/TLS transport before untrusted LANs.
 class FrameWifiTransport {
+  FrameWifiTransport({this.discoveryOverride});
+
+  /// Allows a deterministic loopback receiver in tests. Production uses the
+  /// authenticated UDP discovery mechanism, not this override.
+  final Future<InternetAddress> Function(PairingCredential)? discoveryOverride;
+
   static const int _tcpPort = 39393;
   static const int _udpPort = 38343;
   final Random _random = Random.secure();
@@ -94,7 +100,7 @@ class FrameWifiTransport {
       throw const FormatException('Invalid six-color frame or CRC32');
     }
     onProgress(0.02, 'Finding your frame on Wi-Fi');
-    final address = await discover(qr);
+    final address = await (discoveryOverride?.call(qr) ?? discover(qr));
     final socket = await Socket.connect(
       address,
       _tcpPort,
