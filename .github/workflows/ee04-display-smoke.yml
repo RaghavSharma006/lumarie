@@ -2,8 +2,7 @@ name: EE04 Spectra 6 firmware
 on:
   push:
     branches:
-      - firmware/ee04-hardware-integration
-      - feature/ee04-photo-transfer
+      - master
     paths:
       - 'firmware/lumairie-ee04/**'
       - 'apps/mobile/lib/services/**'
@@ -83,16 +82,16 @@ jobs:
           if-no-files-found: error
 
   publish-preview:
-    # Publication is only allowed from the owner's explicit source branch;
-    # never publish third-party pull request code or a failing CI build.
-    if: github.event_name == 'pull_request' && github.head_ref == 'feature/ee04-photo-transfer' && github.event.pull_request.head.repo.full_name == github.repository
+    # Publish only after successful app and firmware builds on master.
+    # Never publish artifacts produced by untrusted pull requests.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [firmware, flutter-protocol]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: v0.2.0-ee04-preview.1
+      RELEASE_TAG: v0.2.0-ee04-preview.2
     steps:
       - uses: actions/checkout@v4
       - name: Fetch tested Android APK from this CI run
@@ -117,6 +116,9 @@ jobs:
           test -s release/flash/firmware.bin
           mkdir -p release/out
           cp release/android/app-release.apk release/out/LUMAIRIE-Android-EE04-PREVIEW.apk
+          cp release/flash/firmware.bin release/out/LUMAIRIE-EE04-ESP32S3-firmware.bin
+          cp release/flash/bootloader.bin release/out/LUMAIRIE-EE04-ESP32S3-bootloader.bin
+          cp release/flash/partitions.bin release/out/LUMAIRIE-EE04-ESP32S3-partitions.bin
           cp docs/RELEASE_EE04_PREVIEW.md release/flash/READ_ME_FIRST.md
           cp tools/ee04-windows-preview/LUMAIRIE_Installer.py release/flash/LUMAIRIE_Installer.py
           cp tools/ee04-windows-preview/START_LUMAIRIE_WINDOWS.bat release/flash/START_LUMAIRIE_WINDOWS.bat
@@ -129,6 +131,9 @@ jobs:
           (
             cd release/out
             sha256sum LUMAIRIE-Android-EE04-PREVIEW.apk \
+              LUMAIRIE-EE04-ESP32S3-firmware.bin \
+              LUMAIRIE-EE04-ESP32S3-bootloader.bin \
+              LUMAIRIE-EE04-ESP32S3-partitions.bin \
               LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip > SHA256SUMS.txt
           )
       - name: Publish GitHub prerelease, not a production release
@@ -138,6 +143,9 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
               release/out/LUMAIRIE-Android-EE04-PREVIEW.apk \
+              release/out/LUMAIRIE-EE04-ESP32S3-firmware.bin \
+              release/out/LUMAIRIE-EE04-ESP32S3-bootloader.bin \
+              release/out/LUMAIRIE-EE04-ESP32S3-partitions.bin \
               release/out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
               release/out/SHA256SUMS.txt \
               --clobber --repo "$GITHUB_REPOSITORY"
@@ -146,9 +154,12 @@ jobs:
           else
             gh release create "$RELEASE_TAG" \
               release/out/LUMAIRIE-Android-EE04-PREVIEW.apk \
+              release/out/LUMAIRIE-EE04-ESP32S3-firmware.bin \
+              release/out/LUMAIRIE-EE04-ESP32S3-bootloader.bin \
+              release/out/LUMAIRIE-EE04-ESP32S3-partitions.bin \
               release/out/LUMAIRIE-EE04-ESP32S3-FLASH-IMAGES.zip \
               release/out/SHA256SUMS.txt \
-              --target "${{ github.event.pull_request.head.sha }}" \
+              --target "$GITHUB_SHA" \
               --title "LUMAIRIE EE04 Android + ESP32-S3 Photo Transfer (Hardware Preview)" \
               --notes-file docs/RELEASE_EE04_PREVIEW.md \
               --prerelease --repo "$GITHUB_REPOSITORY"
