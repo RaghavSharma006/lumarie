@@ -39,15 +39,35 @@ static bool valid_qr(const char *uri, char *name) {
   snprintf(expected,sizeof(expected),"LUMAIRE-%02X%02X%02X",mac[3],mac[4],mac[5]);
   return strcmp(expected,name)==0;
 }
+extern bool factory_create_identity();
 bool factory_identity_load(FactoryIdentity *out) {
   if(!out) return false;
   memset(out,0,sizeof(*out));
   nvs_handle_t nvs;
-  if(nvs_open("factory",NVS_READONLY,&nvs)!=ESP_OK) return false;
-  size_t length=sizeof(out->qr_uri);
-  bool ok=nvs_get_str(nvs,"qr_uri",out->qr_uri,&length)==ESP_OK &&
-          valid_qr(out->qr_uri,out->ble_name);
-  nvs_close(nvs);
-  if(!ok) memset(out,0,sizeof(*out));
+  esp_err_t opened = nvs_open("factory", NVS_READONLY, &nvs);
+  bool fresh = opened == ESP_ERR_NVS_NOT_FOUND;
+  esp_err_t qr_status = opened;
+  if (opened == ESP_OK) {
+    size_t len = sizeof(out->qr_uri);
+    qr_status = nvs_get_str(nvs, "qr_uri", out->qr_uri, &len);
+    if (qr_status == ESP_ERR_NVS_NOT_FOUND) {
+      size_t bytes = 0;
+      bool has_salt = nvs_get_blob(nvs, "srp_salt", nullptr, &bytes) == ESP_OK;
+      bool has_verifier = nvs_get_blob(nvs, "srp_verifier", nullptr, &bytes) == ESP_OK;
+      fresh = !has_salt && !has_verifier;
+    }
+    nvs_close(nvs);
+  }
+  // Never rotate or overwrite a partly configured factory record.
+  if (fresh && factory_create_identity()) {
+    opened = nvs_open("factory", NVS_READONLY, &nvs);
+    if (opened == ESP_OK) {
+      size_t length = sizeof(out->qr_uri);
+      qr_status = nvs_get_str(nvs, "qr_uri", out->qr_uri, &length);
+      nvs_close(nvs);
+    }
+  }
+  bool ok = qr_status == ESP_OK && valid_qr(out->qr_uri, out->ble_name);
+  if (!ok) memset(out, 0, sizeof(*out));
   return ok;
 }
