@@ -1,15 +1,16 @@
 import 'dart:convert';
-import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// Credential printed on each physical frame. Scanning is not authentication;
+/// the authenticated photo socket verifies possession of the secret.
 class PairingCredential {
   const PairingCredential(this.id, this.name, this.username, this.secret);
+
   final String id;
   final String name;
   final String username;
   final String secret;
 
-  /// AP credentials are derived from the 48-character per-unit random QR key.
   String get hotspotSsid => 'LUMAIRIE-${name.substring(8)}';
 
   String get hotspotPassword {
@@ -33,23 +34,21 @@ class PairingCredential {
         !RegExp(r'^LUMAIRE-[A-Fa-f0-9]{6}$').hasMatch(name) ||
         user.isEmpty ||
         user.length > 64 ||
-        secret.length < 16 ||
-        secret.length > 128) {
-      throw const FormatException('Pairing QR code is incomplete');
+        !RegExp(r'^[a-fA-F0-9]{48}$').hasMatch(secret)) {
+      throw const FormatException('Pairing QR is incomplete or incompatible');
     }
     return PairingCredential(id, name, user, secret);
   }
 }
 
 class PairingService {
-  final _native = EspProvisioningService();
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
-  /// QR scan only saves the key; the subsequent TCP HMAC authenticates device.
+  /// Save QR locally. Identity will be HMAC-authenticated on first photo send.
   Future<void> rememberDirectFrame(PairingCredential qr) async {
-    qr.hotspotPassword; // Validate that the QR contains a direct-Wi-Fi key.
+    qr.hotspotPassword;
     await _storage.write(
       key: 'frame_${qr.id}',
       value: jsonEncode({
@@ -61,83 +60,10 @@ class PairingService {
     );
   }
 
-  Future<void> pair(PairingCredential qr) async {
-    final found = await _native.scanBleDevices('LUMAIRE-');
-    if (!found.contains(qr.name)) {
-      throw StateError(
-          'Frame not advertising. Check that it is powered and ready for setup.');
-    }
-    final response = await _native.fetchCustomData(
-      qr.name,
-      qr.secret,
-      endpoint: 'frame',
-      payload: 'PING',
-      security: EspSecurityScheme.security2,
-      username: qr.username,
-    );
-    if (response == null || jsonDecode(response)['protocol'] != 1) {
-      throw StateError('Frame identity or protocol could not be verified');
-    }
-    await _storage.write(
-        key: 'frame_${qr.id}',
-        value: jsonEncode({
-          'id': qr.id,
-          'name': qr.name,
-          'user': qr.username,
-          'secret': qr.secret,
-        }));
-  }
-
-
-  /// Provision Wi-Fi using the same factory Security 2 credential used to pair.
-  ///
-  /// This method intentionally does not change the onboarding UI. The existing
-  /// workflow can call it once it has obtained the SSID/password from the user.
-  /// A successful return is the native Espressif provisioning result, not a mock.
-  Future<void> provisionStoredWifi(
-    String deviceId,
-    String ssid,
-    String passphrase,
-  ) async {
-    final saved = await _storage.read(key: 'frame_$deviceId');
-    if (saved == null) {
-      throw StateError('Pair this LUMAIRIE frame before provisioning Wi-Fi.');
-    }
-    final utf8SsidBytes = utf8.encode(ssid);
-    if (utf8SsidBytes.isEmpty || utf8SsidBytes.length > 32) {
-      throw const FormatException('Wi-Fi SSID must contain 1–32 UTF-8 bytes.');
-    }
-    final isOpen = passphrase.isEmpty;
-    final isWpaPassphrase = passphrase.length >= 8 && passphrase.length <= 63;
-    final isHexPsk = RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(passphrase);
-    if (!(isOpen || isWpaPassphrase || isHexPsk)) {
-      throw const FormatException('Invalid Wi-Fi passphrase length.');
-    }
-    final json = jsonDecode(saved) as Map<String, dynamic>;
-    final name = json['name'] as String;
-    final username = json['user'] as String;
-    final secret = json['secret'] as String;
-    final devices = await _native.scanBleDevices('LUMAIRE-');
-    if (!devices.contains(name)) {
-      throw StateError('Frame not advertising. Hold the frame reset button to re-enter setup.');
-    }
-    final ok = await _native.provisionWifi(
-      name,
-      secret,
-      ssid,
-      passphrase,
-      security: EspSecurityScheme.security2,
-      username: username,
-    );
-    if (!ok) throw StateError('Wi-Fi provisioning was not confirmed.');
-  }
-
-  /// Read the authenticated per-device secret from encrypted phone storage.
-  /// It never appears in a URL, a network discovery datagram, or a log.
   Future<PairingCredential> loadPairedCredential(String id) async {
     final saved = await _storage.read(key: 'frame_$id');
     if (saved == null) {
-      throw StateError('Pair the physical frame before sending a photo.');
+      throw StateError('Scan the QR on your physical Lumairie frame first.');
     }
     final data = jsonDecode(saved) as Map<String, dynamic>;
     return PairingCredential(
