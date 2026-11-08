@@ -4,6 +4,7 @@ on:
     branches:
       - firmware/ee04-hardware-integration
       - feature/ee04-photo-transfer
+      - feature/ee04-self-wifi
     paths:
       - 'firmware/lumairie-ee04/**'
       - 'apps/mobile/lib/services/**'
@@ -15,7 +16,10 @@ on:
   pull_request:
     paths:
       - 'firmware/lumairie-ee04/**'
-      - 'apps/mobile/lib/services/pairing.dart'
+      - 'apps/mobile/lib/services/**'
+      - 'apps/mobile/lib/main.dart'
+      - 'apps/mobile/android/**'
+      - 'apps/mobile/test/frame_ap_test.dart'
       - '.github/workflows/ee04-display-smoke.yml'
   workflow_dispatch:
 
@@ -71,7 +75,7 @@ jobs:
         run: flutter analyze --no-pub lib
       - name: Existing pairing tests
         working-directory: apps/mobile
-        run: flutter test test/pairing_test.dart test/frame_wifi_transport_test.dart
+        run: flutter test test/pairing_test.dart test/frame_wifi_transport_test.dart test/frame_ap_test.dart
       - name: Build Android hardware-test APK
         working-directory: apps/mobile
         run: flutter build apk --release
