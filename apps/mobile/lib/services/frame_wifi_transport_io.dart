@@ -20,7 +20,9 @@ typedef FrameSendProgress = void Function(double fraction, String message);
 /// Wi-Fi image bytes are not encrypted at the application layer: production
 /// deployment should use an audited AEAD/TLS transport before untrusted LANs.
 class FrameWifiTransport {
-  FrameWifiTransport({this.discoveryOverride});
+  FrameWifiTransport({this.discoveryOverride, this.directHotspot = false});
+  /// Use the static ESP32 SoftAP address after Android has joined the frame network.
+  final bool directHotspot;
 
   /// Allows a deterministic loopback receiver in tests. Production uses the
   /// authenticated UDP discovery mechanism, not this override.
@@ -100,7 +102,9 @@ class FrameWifiTransport {
       throw const FormatException('Invalid six-color frame or CRC32');
     }
     onProgress(0.02, 'Finding your frame on Wi-Fi');
-    final address = await (discoveryOverride?.call(qr) ?? discover(qr));
+    final address = directHotspot
+        ? InternetAddress('192.168.4.1')
+        : await (discoveryOverride?.call(qr) ?? discover(qr));
     final socket = await Socket.connect(
       address,
       _tcpPort,
