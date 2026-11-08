@@ -16,4 +16,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Profile'), findsWidgets);
   });
+
+  testWidgets('real frame QR action stays visible with Demo Mode off',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'demo': false, 'dark': false});
+    await tester.pumpWidget(const LumairieApp(initialPage: 5));
+    await tester.pumpAndSettle();
+    final scan = find.text('Scan frame QR code');
+    expect(scan, findsOneWidget);
+    expect(find.text('Open demo frame'), findsNothing);
+    expect(
+        tester.getBottomLeft(scan).dy,
+        lessThan(
+            tester.view.physicalSize.height / tester.view.devicePixelRatio));
+  });
 }

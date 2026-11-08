@@ -1016,17 +1016,19 @@ class _LumairieAppState extends State<LumairieApp> {
               onTap: wifiProvisionBusy ? null : _configurePairedWifi),
           const SizedBox(height: 12),
         ],
-        PrimaryButton(
-            label: pairingBusy ? 'Authenticating…' : 'Scan frame QR code',
-            onTap: pairingBusy ? null : _scanAndPair),
         if (demo) ...[
           const SizedBox(height: 12),
           PrimaryButton(
               label: 'Open demo frame', outline: true, onTap: () => _go(1)),
         ],
       ],
-      bottom:
-          PrimaryButton(label: 'Cancel', outline: true, onTap: () => _go(0)));
+      bottom: Column(mainAxisSize: MainAxisSize.min, children: [
+        PrimaryButton(
+            label: pairingBusy ? 'Authenticating…' : 'Scan frame QR code',
+            onTap: pairingBusy ? null : _scanAndPair),
+        const SizedBox(height: 10),
+        PrimaryButton(label: 'Cancel', outline: true, onTap: () => _go(0)),
+      ]));
 
   Widget _deviceIllustration(Palette p) => Center(
         child: Container(
@@ -1064,11 +1066,15 @@ class _LumairieAppState extends State<LumairieApp> {
             Icon(complete ? Icons.check_circle : Icons.radio_button_unchecked,
                 size: 19, color: complete ? p.foreground : p.muted),
             const SizedBox(width: 11),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: Design.body(p, size: 12)),
-              const SizedBox(height: 3),
-              Text(subtitle, style: Design.caption(p, muted: true))
-            ]),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Design.body(p, size: 12)),
+                    const SizedBox(height: 3),
+                    Text(subtitle, style: Design.caption(p, muted: true))
+                  ]),
+            ),
           ]));
 
   Widget _addWidget(Palette p) {
@@ -1212,6 +1218,7 @@ class ScanQrPage extends StatefulWidget {
 
 class _ScanQrPageState extends State<ScanQrPage> {
   bool captured = false;
+  String? scanError;
   @override
   Widget build(BuildContext context) {
     final p = Palette(widget.dark);
@@ -1229,13 +1236,39 @@ class _ScanQrPageState extends State<ScanQrPage> {
                 padding: const EdgeInsets.all(22),
                 child: ClipRRect(
                     borderRadius: BorderRadius.circular(15),
-                    child: MobileScanner(onDetect: (capture) {
-                      if (captured || capture.barcodes.isEmpty) return;
-                      final raw = capture.barcodes.first.rawValue;
-                      if (raw == null) return;
-                      captured = true;
-                      Navigator.of(context).pop(raw);
-                    })))),
+                    child: MobileScanner(
+                      errorBuilder: (context, error) => Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            'Camera unavailable. Allow camera access for Lumairie in phone settings, then reopen this screen.\n$error',
+                            textAlign: TextAlign.center,
+                            style: Design.body(p, muted: true),
+                          ),
+                        ),
+                      ),
+                      onDetect: (capture) {
+                        if (captured || capture.barcodes.isEmpty) return;
+                        final raw = capture.barcodes.first.rawValue;
+                        if (raw == null) return;
+                        try {
+                          PairingCredential.parse(raw);
+                        } on FormatException {
+                          if (scanError == null) {
+                            setState(() => scanError =
+                                'This is not a Lumairie frame QR code.');
+                          }
+                          return;
+                        }
+                        captured = true;
+                        Navigator.of(context).pop(raw);
+                      },
+                    )))),
+        if (scanError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            child: Text(scanError!, style: Design.body(p, muted: true)),
+          ),
         Padding(
             padding: const EdgeInsets.all(22),
             child: Text(

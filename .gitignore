@@ -8,6 +8,7 @@ firmware/sdkconfig
 firmware/sdkconfig.old
 firmware/managed_components/
 apps/mobile/android/.kotlin/
+apps/mobile/test/failures/
 deliverables/HARDWARE_TEST/*.apk
 .vercel
 .env*
