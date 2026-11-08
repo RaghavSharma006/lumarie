@@ -47,8 +47,8 @@ class FrameWifiTransport {
   Future<InternetAddress> discover(PairingCredential qr) async {
     final name = ascii.encode(qr.name);
     if (name.length != 14) throw const FormatException('Invalid BLE name');
-    final nonce = Uint8List.fromList(
-        List<int>.generate(8, (_) => _random.nextInt(256)));
+    final nonce =
+        Uint8List.fromList(List<int>.generate(8, (_) => _random.nextInt(256)));
     final query = Uint8List.fromList([...ascii.encode('LMD1'), ...nonce]);
     final udp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     udp.broadcastEnabled = true;
@@ -67,7 +67,8 @@ class FrameWifiTransport {
           continue;
         }
         if (!result.isCompleted) {
-          result.complete(InternetAddress.fromRawAddress(bytes.sublist(18, 22)));
+          result
+              .complete(InternetAddress.fromRawAddress(bytes.sublist(18, 22)));
         }
       }
     });
@@ -75,7 +76,8 @@ class FrameWifiTransport {
       for (var attempt = 0; attempt < 4; ++attempt) {
         udp.send(query, InternetAddress('255.255.255.255'), _udpPort);
         try {
-          return await result.future.timeout(const Duration(milliseconds: 1300));
+          return await result.future
+              .timeout(const Duration(milliseconds: 1300));
         } on TimeoutException {
           // Wi-Fi multicast/broadcast can take a second to start on phones.
         }
@@ -94,7 +96,7 @@ class FrameWifiTransport {
     required FrameSendProgress onProgress,
   }) async {
     if (!((frame.width == 800 && frame.height == 480) ||
-          (frame.width == 480 && frame.height == 800)) ||
+            (frame.width == 480 && frame.height == 800)) ||
         frame.pixels.length != 192000 ||
         ImagePipeline.crc32(frame.pixels) != frame.crc32) {
       throw const FormatException('Invalid six-color frame or CRC32');
@@ -153,7 +155,8 @@ class FrameWifiTransport {
         }
         final payload = Uint8List.fromList(response.sublist(4, 13));
         if (payload[0] != packet[0] || payload[8] != 0) {
-          throw StateError('Frame rejected request 0x${packet[0].toRadixString(16)}');
+          throw StateError(
+              'Frame rejected request 0x${packet[0].toRadixString(16)}');
         }
         sequence += 1;
         return payload;
@@ -162,23 +165,25 @@ class FrameWifiTransport {
       final capabilities = await exchange(FrameProtocol.capabilities());
       final capabilityData = ByteData.sublistView(capabilities);
       if (capabilityData.getUint32(1, Endian.little) != FrameProtocol.version ||
-          capabilityData.getUint32(5, Endian.little) != FrameProtocol.maxChunk) {
+          capabilityData.getUint32(5, Endian.little) !=
+              FrameProtocol.maxChunk) {
         throw StateError('Frame protocol version or chunk size mismatch');
       }
       await exchange(FrameProtocol.begin(frame));
       onProgress(0.05, 'Sending six-color pixels');
-      for (var offset = 0; offset < frame.pixels.length;
+      for (var offset = 0;
+          offset < frame.pixels.length;
           offset += FrameProtocol.maxChunk) {
-        final end = (offset + FrameProtocol.maxChunk)
-            .clamp(0, frame.pixels.length);
+        final end =
+            (offset + FrameProtocol.maxChunk).clamp(0, frame.pixels.length);
         final acknowledgement = await exchange(
           FrameProtocol.chunk(
             offset,
             Uint8List.sublistView(frame.pixels, offset, end),
           ),
         );
-        final ackOffset = ByteData.sublistView(acknowledgement)
-            .getUint32(1, Endian.little);
+        final ackOffset =
+            ByteData.sublistView(acknowledgement).getUint32(1, Endian.little);
         if (ackOffset != end) {
           throw StateError('Frame acknowledged an unexpected image offset');
         }
@@ -187,15 +192,19 @@ class FrameWifiTransport {
               'Transferred ${end ~/ 1024} of 187 KB');
         }
       }
-      onProgress(0.96, 'Verifying and refreshing Spectra 6 display');
+      onProgress(0.96, 'Verifying image on frame');
       final confirmation = await exchange(
         FrameProtocol.end(),
         timeout: const Duration(seconds: 180),
       );
-      if (confirmation[5] != 2) {
-        throw StateError('Frame verified the data but did not confirm display');
+      if (confirmation[5] != 1 && confirmation[5] != 2) {
+        throw StateError('Frame did not confirm verified image delivery');
       }
-      onProgress(1.0, 'Photo displayed on the physical frame');
+      onProgress(
+          1.0,
+          confirmation[5] == 2
+              ? 'Frame reports a completed display refresh'
+              : 'Image verified on frame; display refresh unavailable');
     } finally {
       await incoming.cancel();
       await socket.close();

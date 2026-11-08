@@ -165,6 +165,7 @@ class _LumairieAppState extends State<LumairieApp> {
           });
         }
       }
+
       if (demo) {
         await mockFrame.transfer(packed,
             dropAckOnceAt: kIsWeb && simFault == 1 ? 0 : null,
@@ -192,11 +193,12 @@ class _LumairieAppState extends State<LumairieApp> {
       } else {
         setState(() {
           simState = 'Standby';
-          simStatus = 'Physical frame confirmed full ePaper refresh';
+          simStatus = 'Frame verified image transfer';
           sendProgress = 1;
-          sendStatus = 'Photo displayed on frame';
+          sendStatus = 'Image delivered to frame';
         });
-        _notice('Photo displayed on your physical LUMAIRIE frame.');
+        _notice(
+            'Image delivered and verified. Display refresh is not yet available on this hardware.');
       }
     } catch (error) {
       if (mounted) {
@@ -264,7 +266,8 @@ class _LumairieAppState extends State<LumairieApp> {
           children: [
             TextField(
               controller: ssidController,
-              decoration: const InputDecoration(labelText: 'Wi-Fi network (SSID)'),
+              decoration:
+                  const InputDecoration(labelText: 'Wi-Fi network (SSID)'),
             ),
             TextField(
               controller: passwordController,
@@ -280,7 +283,7 @@ class _LumairieAppState extends State<LumairieApp> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(
-              dialog, [ssidController.text, passwordController.text]),
+                dialog, [ssidController.text, passwordController.text]),
             child: const Text('Connect'),
           ),
         ],
@@ -303,8 +306,8 @@ class _LumairieAppState extends State<LumairieApp> {
     }
   }
 
-  void _notice(String value) => messengerKey.currentState
-      ?.showSnackBar(SnackBar(content: Text(value)));
+  void _notice(String value) =>
+      messengerKey.currentState?.showSnackBar(SnackBar(content: Text(value)));
 
   @override
   Widget build(BuildContext context) {
@@ -681,8 +684,12 @@ class _LumairieAppState extends State<LumairieApp> {
         const SizedBox(height: 21),
         Text('Sending to', style: Design.caption(p, muted: true)),
         const SizedBox(height: 4),
-        Text(!demo ? '${pairedName ?? 'LUMAIRIE'} · 7.3”' :
-            hallway ? 'Hallway · 10”' : 'Living room · 13”',
+        Text(
+            !demo
+                ? '${pairedName ?? 'LUMAIRIE'} · 7.3”'
+                : hallway
+                    ? 'Hallway · 10”'
+                    : 'Living room · 13”',
             style: Design.title(p, size: 21)),
         const SizedBox(height: 16),
         Surface(
@@ -741,8 +748,9 @@ class _LumairieAppState extends State<LumairieApp> {
         PrimaryButton(
             label: sending
                 ? 'Sending…'
-                : !demo ? 'Send to LUMAIRIE frame' :
-                    'Send to ${hallway ? 'Hallway' : 'Living room'}',
+                : !demo
+                    ? 'Send to LUMAIRIE frame'
+                    : 'Send to ${hallway ? 'Hallway' : 'Living room'}',
             onTap: sending ? null : _send),
         const SizedBox(height: 10),
         TextButton(
@@ -987,8 +995,13 @@ class _LumairieAppState extends State<LumairieApp> {
         const SizedBox(height: 35),
         _step(p, demo || pairedName != null, 'Frame found',
             demo ? 'Demo frame' : pairedName ?? 'Scan QR to find frame'),
-        _step(p, wifiProvisionedHere, 'Joining Wi-Fi',
-            wifiProvisionedHere ? 'Connected successfully' : 'Connect after scanning the frame QR'),
+        _step(
+            p,
+            wifiProvisionedHere,
+            'Joining Wi-Fi',
+            wifiProvisionedHere
+                ? 'Connected successfully'
+                : 'Connect after scanning the frame QR'),
         _step(p, false, 'Syncing your display',
             'Requires physical pairing window'),
         const SizedBox(height: 24),
@@ -997,19 +1010,20 @@ class _LumairieAppState extends State<LumairieApp> {
               style: TextStyle(color: p.foreground, fontSize: 11)),
         if (!demo && pairedId != null) ...[
           PrimaryButton(
-            label: wifiProvisionBusy ? 'Connecting to Wi-Fi…' : 'Connect to Wi-Fi',
-            onTap: wifiProvisionBusy ? null : _configurePairedWifi),
+              label: wifiProvisionBusy
+                  ? 'Connecting to Wi-Fi…'
+                  : 'Connect to Wi-Fi',
+              onTap: wifiProvisionBusy ? null : _configurePairedWifi),
           const SizedBox(height: 12),
         ],
         PrimaryButton(
-            label: demo
-                ? 'Open demo frame'
-                : pairingBusy
-                    ? 'Authenticating…'
-                    : pairedName != null
-                        ? 'Frame paired'
-                        : 'Scan frame QR code',
-            onTap: pairingBusy ? null : () => demo ? _go(1) : _scanAndPair()),
+            label: pairingBusy ? 'Authenticating…' : 'Scan frame QR code',
+            onTap: pairingBusy ? null : _scanAndPair),
+        if (demo) ...[
+          const SizedBox(height: 12),
+          PrimaryButton(
+              label: 'Open demo frame', outline: true, onTap: () => _go(1)),
+        ],
       ],
       bottom:
           PrimaryButton(label: 'Cancel', outline: true, onTap: () => _go(0)));
