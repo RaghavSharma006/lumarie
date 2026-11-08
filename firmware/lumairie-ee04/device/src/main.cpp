@@ -1,73 +1,98 @@
-// LUMAIRIE EE04 combined firmware candidate: real panel + real Wi-Fi provisioning.
-// No fake success acknowledgments; requires per-unit manufactured QR + SRP verifier.
+// LUMAIRIE EE04 direct Wi-Fi hardware preview.
+// The frame creates a per-device WPA2 hotspot; no home router/provisioning needed.
+// Do not enable the physical ED2208 driver on unmatched display hardware.
 #include <Arduino.h>
-#include <nvs_flash.h>
 #include <WiFi.h>
-#include "driver.h"
+#include <nvs_flash.h>
+#include <string.h>
 #include "identity.h"
 #include "display.h"
-#include "provisioning.h"
 #include "photo_transfer.h"
 
 static constexpr uint8_t BUTTON_KEY0 = 2;  // Seeed EE04 active-low button
-static constexpr uint32_t WIFI_RESET_HOLD_MS = 8000;
-static constexpr uint32_t PANEL_REFRESH_GAP_MS = 5000;
+static constexpr uint32_t RESTART_HOLD_MS = 8000;
 static FactoryIdentity identity = {};
-static FrameState displayed = FrameState::BOOTING;
-static uint32_t refreshed_at = 0;
-static uint32_t pressed_since = 0;
-static bool reset_consumed = false;
+static bool hotspot_ready = false;
 static bool identity_ok = false;
+static uint32_t pressed_since = 0;
+static bool restart_consumed = false;
 
 static void show(FrameState state) {
-  display_state(state,
-    identity_ok ? identity.ble_name : "FACTORY CONFIGURATION REQUIRED",
-    identity_ok ? identity.qr_uri : nullptr);
-  displayed = state;
-  refreshed_at = millis();
+  display_state(state, identity_ok ? identity.ble_name : "CONFIGURATION ERROR",
+                identity_ok ? identity.qr_uri : nullptr);
 }
+
 void setup() {
   Serial.begin(115200);
   pinMode(BUTTON_KEY0, INPUT_PULLUP);
   display_init();
   if (nvs_flash_init() != ESP_OK) {
-    Serial.println("NVS cannot initialize; no implicit erase performed");
+    Serial.println("Cannot initialize NVS. No data erased.");
     show(FrameState::PROVISIONING_FAILED);
     return;
   }
-  // Radio-on entropy before generating the first-boot SRP secret.
+
+  // Radio provides hardware entropy for the factory-generated pairing secret.
   WiFi.mode(WIFI_STA);
   if (!factory_identity_load(&identity)) {
-    Serial.println("Factory QR missing, invalid, or mismatched to BT MAC; BLE disabled");
+    Serial.println("Factory identity invalid; refusing insecure hotspot.");
     show(FrameState::PROVISIONING_FAILED);
     return;
   }
   identity_ok = true;
   photo_transfer_begin(identity.ble_name, identity.qr_uri);
-  show(FrameState::INITIALIZING);
-  if (!provisioning_begin(identity.qr_uri, identity.ble_name)) {
-    Serial.println("Security 2 provisioning initialization failed");
+
+  // The same 48-character random secret is printed only in the physical QR.
+  // Its first 20 hex characters are the per-device WPA2 password (80 bits).
+  const char *secret = strstr(identity.qr_uri, "&secret=");
+  if (!secret || strlen(secret + 8) < 20) {
+    Serial.println("Pairing credential missing; hotspot disabled.");
     show(FrameState::PROVISIONING_FAILED);
     return;
   }
-  show(provisioning_state());
-}
-void loop() {
-  if (!identity_ok) { delay(100); return; }
-  provisioning_poll();
-  photo_transfer_poll(provisioning_is_connected());
-  const uint32_t now = millis();
-  bool held = digitalRead(BUTTON_KEY0) == LOW;
-  if (!held) { pressed_since = 0; reset_consumed = false; }
-  else if (pressed_since == 0) pressed_since = now;
-  else if (!reset_consumed && now - pressed_since >= WIFI_RESET_HOLD_MS) {
-    reset_consumed = true;
-    Serial.println("KEY0 long-press: forgetting Wi-Fi only; factory SRP retained");
-    provisioning_reset_wifi();
+  char password[21] = {};
+  memcpy(password, secret + 8, 20);
+  char ssid[20] = {};
+  snprintf(ssid, sizeof(ssid), "LUMAIRIE-%s", identity.ble_name + 8);
+
+  WiFi.mode(WIFI_AP);
+  const IPAddress local(192, 168, 4, 1);
+  const IPAddress netmask(255, 255, 255, 0);
+  hotspot_ready = WiFi.softAPConfig(local, local, netmask)
+                  && WiFi.softAP(ssid, password, 1, 0, 1);
+  memset(password, 0, sizeof(password));
+  if (!hotspot_ready) {
+    Serial.println("Failed to start password-protected frame hotspot.");
+    show(FrameState::PROVISIONING_FAILED);
+    return;
   }
-  FrameState next = provisioning_state();
-  // Never overwrite a successfully displayed photo with a transient status UI.
-  if (!photo_transfer_has_photo() && next != displayed &&
-      now - refreshed_at > PANEL_REFRESH_GAP_MS) show(next);
-  delay(50);
+
+  Serial.print("Frame Wi-Fi ready: ");
+  Serial.println(ssid); // Never log the WPA2 password or the full pairing QR.
+  Serial.print("Frame transfer IP: ");
+  Serial.println(WiFi.softAPIP());
+  show(FrameState::WAITING_FOR_SETUP); // Keep QR on screen for the first scan.
+}
+
+void loop() {
+  if (!identity_ok || !hotspot_ready) {
+    delay(100);
+    return;
+  }
+  photo_transfer_poll(true); // AP is ready even if no phone is attached yet.
+
+  // Optional recovery: hold KEY0 for 8 seconds to restart the hotspot.
+  const uint32_t now = millis();
+  const bool held = digitalRead(BUTTON_KEY0) == LOW;
+  if (!held) {
+    pressed_since = 0;
+    restart_consumed = false;
+  } else if (pressed_since == 0) {
+    pressed_since = now;
+  } else if (!restart_consumed && now - pressed_since >= RESTART_HOLD_MS) {
+    restart_consumed = true;
+    Serial.println("KEY0 long press: restarting without erasing credentials.");
+    ESP.restart();
+  }
+  delay(20);
 }
