@@ -12,6 +12,11 @@ route or an `install.` subdomain).
   asked to type COM numbers. Uses `navigator.serial.requestPort()` and
   `getInfo()`, but intentionally does **not** open the port, send commands,
   read flash or write firmware.
+- ESP32-C3 USB board identification using Espressif esptool-js. The test opens
+  the selected port, resets the board into its ROM bootloader, may upload a
+  temporary RAM helper, and reads the chip family and flash size. It never
+  invokes flash erase or write. The bundled library is Apache 2.0 licensed;
+  see `vendor/esptool-js.LICENSE`.
 - Accessible progress and error feedback, friendly mobile layout, and links
   back to release/source documentation.
 
@@ -22,6 +27,11 @@ the board is the exact XIAO ESP32-S3 Plus with 16MB flash. Flashing existing
 factory hardware can erase settings. A production one-click installer needs
 hardware identity/flash security checks, full factory backup and recovery
 instructions, a verified image/manifest, and physical validation.
+
+The ESP32-C3 test is separate from the EE04 ESP32-S3 download. It cannot
+verify the exact development board or display wiring. No C3 image on this
+page connects to the Android app, and none is offered for flashing. A real
+C3 board has not been available to test the probe flow.
 
 ## Deploy on Vercel (without touching the existing company website)
 

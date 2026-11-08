@@ -47,7 +47,7 @@
         <p class="eyebrow">LUMAIRIE · Setup Studio</p>
         <h1>Your moments,<br>beautifully displayed.</h1>
         <p class="lead">A simpler home for getting started with your LUMAIRIE ePaper frame. Download the app, explore USB setup, and bring your photographs to life.</p>
-        <div class="actions"><a class="btn" href="#get-started">Get started <span aria-hidden="true">↗</span></a><a class="btn alt" href="#usb">Explore browser setup</a></div>
+        <div class="actions"><a class="btn" href="#get-started">Get started <span aria-hidden="true">↗</span></a><a class="btn alt" href="#c3-test">Test ESP32-C3 board</a></div>
       </div>
       <div class="art" role="img" aria-label="Illustration of a colorful six-color ePaper frame">
         <div class="frame"><div class="scene"></div><div class="captionart"><em>keep the<br>beautiful<br>moments.</em><small>quiet technology, lasting memories</small></div></div>
@@ -76,6 +76,20 @@
         <div class="step"><b>01</b><h3>Connect your frame</h3><p>Use a USB-C data cable and a Windows computer with Chrome or Edge.</p></div>
         <div class="step"><b>02</b><h3>Choose your device</h3><p>Our browser demo lets you select the USB device without typing a COM port.</p></div>
         <div class="step"><b>03</b><h3>Get the Android app</h3><p>Install the test app on your phone. Actual frame transfer still needs physical testing.</p></div>
+      </div>
+    </section>
+    <section class="panel" id="c3-test">
+      <div>
+        <span class="pill">ESP32-C3 board test</span>
+        <h2>Check the board<br>through USB.</h2>
+        <p>Connect the ESP32-C3 to desktop Chrome or Edge with a USB data cable. The browser will identify the chip and its flash capacity through the Espressif ROM bootloader. This test can reset the board and run a temporary RAM helper; it does not erase or write flash.</p>
+        <p>The display stays disabled until the board schematic, panel voltages and GPIO mapping are verified. The ESP32-S3 firmware download above is not compatible with this C3 board.</p>
+      </div>
+      <div>
+        <p style="color:#eff7e9;font-weight:700;margin-bottom:10px">Identify your ESP32-C3</p>
+        <button class="btn connect" id="probeBtn" type="button">Test connected board <span aria-hidden="true">↗</span></button>
+        <div id="probeStatus" role="status" aria-live="polite">Connect the board by USB, then choose its serial port.</div>
+        <div id="probeResult" hidden style="border:1px solid #64796b;border-radius:10px;padding:14px;font-size:13px" aria-live="polite"></div>
       </div>
     </section>
     <section class="panel" id="usb">
@@ -128,5 +142,6 @@
     });
   })();
 </script>
+<script type="module" src="./c3-test.js"></script>
 </body>
 </html>
