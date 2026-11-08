@@ -82,14 +82,18 @@
       <div>
         <span class="pill">ESP32-C3 board test</span>
         <h2>Check the board<br>through USB.</h2>
-        <p>Connect the ESP32-C3 to desktop Chrome or Edge with a USB data cable. The browser will identify the chip and its flash capacity through the Espressif ROM bootloader. This test can reset the board and run a temporary RAM helper; it does not erase or write flash.</p>
-        <p>The display stays disabled until the board schematic, panel voltages and GPIO mapping are verified. The ESP32-S3 firmware download above is not compatible with this C3 board.</p>
+        <p>Connect the ESP32-C3 to desktop Chrome or Edge with a USB data cable. Identify its chip and flash capacity, then optionally back up and install the C3 developer firmware.</p>
+        <p><strong>This firmware is a mock-display hardware candidate.</strong> It has no factory pairing credentials, so BLE and app connection stay disabled. The panel stays unpowered until its board schematic, voltages and GPIO mapping are verified. Never use the ESP32-S3 firmware above on a C3.</p>
       </div>
       <div>
         <p style="color:#eff7e9;font-weight:700;margin-bottom:10px">Identify your ESP32-C3</p>
         <button class="btn connect" id="probeBtn" type="button">Test connected board <span aria-hidden="true">↗</span></button>
         <div id="probeStatus" role="status" aria-live="polite">Connect the board by USB, then choose its serial port.</div>
         <div id="probeResult" hidden style="border:1px solid #64796b;border-radius:10px;padding:14px;font-size:13px" aria-live="polite"></div>
+        <label class="check"><input id="flashAck" type="checkbox"><span>I understand this replaces existing firmware and settings. This C3 candidate will <strong>not</strong> connect to the app or refresh the display.</span></label>
+        <button class="btn connect" id="flashBtn" type="button" disabled>Back up and flash C3 candidate</button>
+        <div id="flashStatus" role="status" aria-live="polite" style="font-size:13px;margin-top:12px">Requires an ESP32-C3 with at least 8 MB flash. Keep USB connected throughout.</div>
+        <progress id="flashProgress" max="100" value="0" hidden style="width:100%;margin-top:10px"></progress>
       </div>
     </section>
     <section class="panel" id="usb">

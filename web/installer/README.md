@@ -1,4 +1,4 @@
-# LUMAIRIE Setup Studio (browser demo)
+# LUMAIRIE Setup Studio
 
 A lightweight, responsive standalone website for LUMAIRIE, designed to be
 deployed alongside the company website (for example under an `/install`
@@ -17,21 +17,28 @@ route or an `install.` subdomain).
   temporary RAM helper, and reads the chip family and flash size. It never
   invokes flash erase or write. The bundled library is Apache 2.0 licensed;
   see `vendor/esptool-js.LICENSE`.
+- Optional ESP32-C3 developer flash: requires an identified C3 with at least
+  8 MB flash, downloads a full flash backup, checks each bundled image with
+  SHA-256, writes the ESP-IDF candidate images at their build offsets and
+  reads them back to compare SHA-256. The user must explicitly acknowledge
+  that this replaces existing firmware and confirm after the backup download.
 - Accessible progress and error feedback, friendly mobile layout, and links
   back to release/source documentation.
 
-**This demo is not a working browser flasher.** We are explicitly not offering
-one-click flash installation yet because the firmware uploader has never been
-tested on physical EE04 hardware and Web Serial selection cannot guarantee
-the board is the exact XIAO ESP32-S3 Plus with 16MB flash. Flashing existing
-factory hardware can erase settings. A production one-click installer needs
-hardware identity/flash security checks, full factory backup and recovery
-instructions, a verified image/manifest, and physical validation.
+The EE04 ESP32-S3 firmware kit above has no browser flasher because its board
+has not been physically validated. The separate C3 flash flow is for a
+developer candidate only and is not a production installer. It has not been
+tested on physical C3 hardware. Keep the full-flash backup for recovery.
 
 The ESP32-C3 test is separate from the EE04 ESP32-S3 download. It cannot
-verify the exact development board or display wiring. No C3 image on this
-page connects to the Android app, and none is offered for flashing. A real
-C3 board has not been available to test the probe flow.
+verify the exact development board or display wiring. The bundled C3 image
+does not connect to the Android app: factory Security-2 pairing material is
+absent, so the firmware keeps BLE disabled. The panel driver is mock-only and
+all unverified GPIOs are disabled. Flashing it on a working frame will replace
+the existing app with a build that cannot refresh the display. Its layout is
+from `D:/startup/lumarie_gpt_sol6/firmware/build5/flasher_args.json`:
+bootloader at 0x0, partition table at 0x8000, initial OTA data at 0xf000,
+and app at 0x20000. It was compiled with ESP-IDF v5.5.6 for 8 MB flash.
 
 ## Deploy on Vercel (without touching the existing company website)
 
