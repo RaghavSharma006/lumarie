@@ -7,6 +7,7 @@ import 'design_system.dart';
 import 'services/image_pipeline.dart';
 import 'services/mock_frame.dart';
 import 'services/pairing.dart';
+import 'services/frame_ap_connection.dart';
 import 'services/frame_wifi_transport_stub.dart'
     if (dart.library.io) 'services/frame_wifi_transport_io.dart' as physical;
 import 'services/photo_store_web.dart'
@@ -52,8 +53,6 @@ class _LumairieAppState extends State<LumairieApp> {
   String? pairedName;
   String? pairedId;
   String? pairingError;
-  bool wifiProvisionBusy = false;
-  bool wifiProvisionedHere = false;
 
   @override
   void initState() {
@@ -173,11 +172,19 @@ class _LumairieAppState extends State<LumairieApp> {
             onProgress: updateProgress);
       } else {
         final qr = await PairingService().loadPairedCredential(pairedId!);
-        await physical.FrameWifiTransport().send(
-          packed,
-          qr,
-          onProgress: updateProgress,
-        );
+        final hotspot = FrameApConnection();
+        try {
+          updateProgress(0.01, 'Connecting to LUMAIRIE private Wi-Fi');
+          await hotspot.connect(qr);
+          await physical.FrameWifiTransport(directHotspot: true).send(
+            packed,
+            qr,
+            onProgress: updateProgress,
+          );
+        } finally {
+          // Return the phone to its usual network, even if sending fails.
+          await hotspot.disconnect();
+        }
       }
       if (!mounted) return;
       if (demo) {
@@ -226,7 +233,7 @@ class _LumairieAppState extends State<LumairieApp> {
     });
     try {
       final qr = PairingCredential.parse(raw);
-      await PairingService().pair(qr);
+      await PairingService().rememberDirectFrame(qr);
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pairedName', qr.name);
@@ -238,7 +245,7 @@ class _LumairieAppState extends State<LumairieApp> {
         pairingBusy = false;
         demo = false;
       });
-      _notice('Frame authenticated and stored on this phone.');
+      _notice('Frame QR saved. Tap Send to connect to its private Wi-Fi.');
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -250,59 +257,6 @@ class _LumairieAppState extends State<LumairieApp> {
 
   /// Uses the existing pairing screen and Espressif Security 2 session.
   /// No credentials are saved in preferences or sent to a backend.
-  Future<void> _configurePairedWifi() async {
-    final id = pairedId;
-    if (id == null || wifiProvisionBusy) return;
-    final ssidController = TextEditingController();
-    final passwordController = TextEditingController();
-    final values = await showDialog<List<String>>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Connect frame to Wi-Fi'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: ssidController,
-              decoration: const InputDecoration(labelText: 'Wi-Fi network (SSID)'),
-            ),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Wi-Fi password'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(
-              dialog, [ssidController.text, passwordController.text]),
-            child: const Text('Connect'),
-          ),
-        ],
-      ),
-    );
-    ssidController.dispose();
-    passwordController.dispose();
-    if (values == null || !mounted) return;
-    setState(() => wifiProvisionBusy = true);
-    try {
-      await PairingService().provisionStoredWifi(id, values[0], values[1]);
-      if (!mounted) return;
-      setState(() => wifiProvisionedHere = true);
-      _notice('Frame confirmed connection to Wi-Fi.');
-    } catch (error) {
-      if (!mounted) return;
-      _notice('Wi-Fi provisioning failed: $error');
-    } finally {
-      if (mounted) setState(() => wifiProvisionBusy = false);
-    }
-  }
-
   void _notice(String value) => messengerKey.currentState
       ?.showSnackBar(SnackBar(content: Text(value)));
 
@@ -945,7 +899,7 @@ class _LumairieAppState extends State<LumairieApp> {
         _profileRow(p, 'Add a frame', onTap: () => _go(5)),
         _profileRow(p, 'Local network',
             onTap: () => _notice(
-                'BLE pairing works without Wi-Fi. Local Wi-Fi is optional.')),
+                'Your frame creates private Wi-Fi; no home router is needed.')),
         const SizedBox(height: 20),
         Text('About', style: Design.caption(p, muted: true)),
         _profileRow(p, 'Privacy',
@@ -987,18 +941,18 @@ class _LumairieAppState extends State<LumairieApp> {
         const SizedBox(height: 35),
         _step(p, demo || pairedName != null, 'Frame found',
             demo ? 'Demo frame' : pairedName ?? 'Scan QR to find frame'),
-        _step(p, wifiProvisionedHere, 'Joining Wi-Fi',
-            wifiProvisionedHere ? 'Connected successfully' : 'Connect after scanning the frame QR'),
-        _step(p, false, 'Syncing your display',
-            'Requires physical pairing window'),
+        _step(p, pairedId != null, 'Private frame Wi-Fi',
+            pairedId != null ? 'Connects automatically when you send a photo' : 'Scan QR to save the private Wi-Fi key'),
+        _step(p, false, 'Send a photo',
+            'Android will show a Wi-Fi approval prompt'),
         const SizedBox(height: 24),
         if (pairingError != null)
           Text(pairingError!,
               style: TextStyle(color: p.foreground, fontSize: 11)),
         if (!demo && pairedId != null) ...[
-          PrimaryButton(
-            label: wifiProvisionBusy ? 'Connecting to Wi-Fi…' : 'Connect to Wi-Fi',
-            onTap: wifiProvisionBusy ? null : _configurePairedWifi),
+          Text('No router or Wi-Fi password setup. On the first send, approve Android’s connection to your frame.',
+              textAlign: TextAlign.center,
+              style: Design.caption(p, muted: true)),
           const SizedBox(height: 12),
         ],
         PrimaryButton(
@@ -1007,7 +961,7 @@ class _LumairieAppState extends State<LumairieApp> {
                 : pairingBusy
                     ? 'Authenticating…'
                     : pairedName != null
-                        ? 'Frame paired'
+                        ? 'Frame QR saved'
                         : 'Scan frame QR code',
             onTap: pairingBusy ? null : () => demo ? _go(1) : _scanAndPair()),
       ],
