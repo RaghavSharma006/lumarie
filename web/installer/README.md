@@ -6,7 +6,9 @@ route or an `install.` subdomain).
 
 ## What this first demo actually does
 
-- Real GitHub Release v0.2.0-ee04-preview.2 Android APK direct download.
+- Android 0.1.1 QR test APK direct download from GitHub prerelease
+  `android-v0.1.1-qr-test.1` (development signed; physical C3 transfer
+  remains unverified).
 - Real full EE04 ESP32-S3 firmware-kit ZIP download.
 - Chrome / Edge Web Serial device selection (HTTPS only); users are **not**
   asked to type COM numbers. Uses `navigator.serial.requestPort()` and
