@@ -168,7 +168,7 @@ void discovery() {
   uint8_t response[62] = {};
   memcpy(response, "LMD2", 4);
   memcpy(response + 4, name, 14);
-  IPAddress ip = WiFi.localIP();
+  IPAddress ip = WiFi.softAPIP(); // Frame runs its own AP, not a station.
   for (int i = 0; i < 4; ++i) response[18 + i] = ip[i];
   memcpy(response + 22, request + 4, 8);
   if (!mac(response, 30, response + 30)) return;
