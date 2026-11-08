@@ -47,8 +47,8 @@ void display_state(FrameState state, const char *name, const char *uri) {
     label("WELCOME", 410, 93, 2);
     label("Scan with the LUMAIRIE", 410, 152, 2);
     label("App to connect.", 410, 185, 2);
-    label("Connect your device", 410, 246, 2);
-    label("to Wi-Fi.", 410, 280, 2);
+    label("Frame makes its own", 410, 246, 2);
+    label("private Wi-Fi.", 410, 280, 2);
     label(name, 410, 357, 2);
   } else {
     label(state == FrameState::WIFI_CONNECTED ||
@@ -56,7 +56,7 @@ void display_state(FrameState state, const char *name, const char *uri) {
           75, 155, 4);
     label(name, 75, 241, 2);
   }
-  label(frame_state_name(state), 30, 427, 2);
+  label(state == FrameState::WAITING_FOR_SETUP ? "FRAME WI-FI READY" : frame_state_name(state), 30, 427, 2);
   panel.update();
   panel.sleep();
 }
