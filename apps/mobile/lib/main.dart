@@ -44,6 +44,7 @@ class _LumairieAppState extends State<LumairieApp> {
   final MockFrame mockFrame = MockFrame();
   final GlobalKey<ScaffoldMessengerState> messengerKey =
       GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   bool simWifiConnected = true;
   int simFault = 0;
   String simState = 'Standby';
@@ -218,7 +219,12 @@ class _LumairieAppState extends State<LumairieApp> {
       _notice('Use the Android or iOS app to pair a physical frame.');
       return;
     }
-    final raw = await Navigator.of(context).push<String>(
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      _notice('Scanner is not ready. Reopen Add a frame and try again.');
+      return;
+    }
+    final raw = await navigator.push<String>(
       MaterialPageRoute(builder: (_) => ScanQrPage(dark: dark)),
     );
     if (raw == null || !mounted) return;
@@ -313,6 +319,7 @@ class _LumairieAppState extends State<LumairieApp> {
   Widget build(BuildContext context) {
     final p = Palette(dark);
     return MaterialApp(
+      navigatorKey: navigatorKey,
       scaffoldMessengerKey: messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'Lumairie',

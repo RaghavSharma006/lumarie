@@ -29,5 +29,8 @@ void main() {
         tester.getBottomLeft(scan).dy,
         lessThan(
             tester.view.physicalSize.height / tester.view.devicePixelRatio));
+    await tester.tap(scan);
+    await tester.pumpAndSettle();
+    expect(find.text('Scan frame QR'), findsOneWidget);
   });
 }
