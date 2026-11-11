@@ -24,6 +24,7 @@ static uint32_t connection_start = 0;
 static uint8_t *salt = nullptr;
 static uint8_t *verifier = nullptr;
 static network_prov_security2_params_t sec2 = {};
+static char identity_ble_name[20] = {};
 
 const char *frame_state_name(FrameState s) {
   switch (s) {
@@ -100,8 +101,43 @@ static void event_handler(void *ctx, esp_event_base_t base, int32_t id, void *da
     state = FrameState::WIFI_CONNECTED;
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
     connected = false;
-    if (!failed) state = FrameState::CONNECTING_WIFI;
+    // Do not hide an active BLE setup screen with background STA retries.
+    if (!failed && !manager_ready) state = FrameState::CONNECTING_WIFI;
   }
+}
+
+// Enter BLE setup only when the frame is not reachable on its saved Wi-Fi.
+// Starting the provisioning manager must never erase the per-frame QR or SRP keys.
+static bool start_ble_setup(const char *ble_name) {
+  network_prov_mgr_config_t config = {};
+  config.scheme = network_prov_scheme_ble;
+  network_prov_event_handler_t handler = NETWORK_PROV_EVENT_HANDLER_NONE;
+  config.scheme_event_handler = handler;
+  esp_err_t err = network_prov_mgr_init(config);
+  if (err != ESP_OK) {
+    Serial.printf("BLE provisioning manager init failed: %d\n", int(err));
+    return false;
+  }
+  manager_ready = true;
+  err = network_prov_mgr_endpoint_create("frame");
+  if (err == ESP_OK) {
+    network_prov_scheme_ble_set_service_uuid(service_uuid);
+    err = network_prov_mgr_start_provisioning(
+      NETWORK_PROV_SECURITY_2, &sec2, ble_name, nullptr);
+  }
+  if (err == ESP_OK) {
+    err = network_prov_mgr_endpoint_register("frame", frame_endpoint, nullptr);
+  }
+  if (err != ESP_OK) {
+    Serial.printf("BLE provisioning start failed: %d\n", int(err));
+    network_prov_mgr_stop_provisioning();
+    network_prov_mgr_deinit();
+    manager_ready = false;
+    return false;
+  }
+  state = FrameState::WAITING_FOR_SETUP;
+  Serial.printf("BLE setup advertising as %s\n", ble_name); // name only; no QR secret
+  return true;
 }
 bool provisioning_begin(const char *qr_uri, const char *ble_name) {
   if (!qr_uri || !ble_name || !load_srp()) return false;
@@ -115,6 +151,7 @@ bool provisioning_begin(const char *qr_uri, const char *ble_name) {
     Serial.println("NVS pairing name does not match BLE MAC");
     return false;
   }
+  snprintf(identity_ble_name, sizeof(identity_ble_name), "%s", ble_name);
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -127,35 +164,32 @@ bool provisioning_begin(const char *qr_uri, const char *ble_name) {
     state = FrameState::CONNECTING_WIFI;
     connection_start = millis();
     WiFi.begin(); // ESP-IDF NVS settings; never log the password
+    Serial.println("Saved Wi-Fi found; trying router before offering BLE setup");
     return true;
   }
 
-  network_prov_mgr_config_t config = {};
-  config.scheme = network_prov_scheme_ble;
-  network_prov_event_handler_t handler = NETWORK_PROV_EVENT_HANDLER_NONE;
-  config.scheme_event_handler = handler;
-  if (network_prov_mgr_init(config) != ESP_OK) return false;
-  manager_ready = true;
-  if (network_prov_mgr_endpoint_create("frame") != ESP_OK) return false;
-  network_prov_scheme_ble_set_service_uuid(service_uuid);
   // sec2 is static, not a temporary local struct; the verifier stays live.
-  if (network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_2, &sec2,
-                                          ble_name, nullptr) != ESP_OK) return false;
-  if (network_prov_mgr_endpoint_register("frame", frame_endpoint, nullptr) != ESP_OK) {
-    network_prov_mgr_stop_provisioning();
-    return false;
-  }
-  state = FrameState::WAITING_FOR_SETUP;
-  return true;
+  return start_ble_setup(ble_name);
 }
 void provisioning_poll() {
   if (connected && state == FrameState::WIFI_CONNECTED &&
       millis() - connected_at > 20000) state = FrameState::NORMAL_OPERATION;
   if (!connected && !manager_ready && state == FrameState::CONNECTING_WIFI &&
-      millis() - connection_start > 45000) state = FrameState::PROVISIONING_FAILED;
+      millis() - connection_start > 45000) {
+    // A stale saved SSID previously disabled BLE forever: the QR could scan,
+    // but the phone had nothing to discover. Retry securely without erasing
+    // factory QR/SRP identity or exposing an unauthenticated access point.
+    Serial.println("Saved Wi-Fi unavailable; enabling BLE reprovisioning");
+    if (!start_ble_setup(identity_ble_name)) {
+      state = FrameState::PROVISIONING_FAILED;
+    }
+  }
   if (failed && manager_ready) {
     // Restore the manager state machine so the phone can retry.
-    if (network_prov_mgr_reset_wifi_sm_state_on_failure() == ESP_OK) failed = false;
+    if (network_prov_mgr_reset_wifi_sm_state_on_failure() == ESP_OK) {
+      failed = false;
+      state = FrameState::WAITING_FOR_SETUP;
+    }
   }
 }
 void provisioning_reset_wifi() {
