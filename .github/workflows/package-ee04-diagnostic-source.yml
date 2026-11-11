@@ -1,0 +1,42 @@
+name: Package EE04 BLE diagnostic firmware source
+on:
+  push:
+    branches:
+      - fix/ee04-ble-pairing-recovery
+    paths:
+      - .github/workflows/package-ee04-diagnostic-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 89d2e4cf0f41058a72004a401b1c06db92850a01
+      - name: Package exact tested firmware source
+        run: |
+          set -euo pipefail
+          test -f firmware/lumairie-ee04/device/src/provisioning.cpp
+          grep -q 'esp32-core-3.3.6.tar.xz' firmware/lumairie-ee04/device/platformio.ini
+          mkdir -p output
+          cat > output/README.txt <<'EOF'
+          LUMAIRIE ESP32-S3 / Seeed EE04 diagnostic firmware source
+          Source commit: 89d2e4cf0f41058a72004a401b1c06db92850a01
+          GitHub Actions build: https://github.com/RaghavSharma006/lumarie/actions/runs/42993308330
+          Folder to build: firmware/lumairie-ee04/device
+          Command: pio run -e ee04
+          Pin: Arduino-ESP32 core and libraries 3.3.6
+          WARNING: Hardware test only, older upstream BLE security code, not production-ready.
+          Back up NVS and never erase all flash; factory QR/SRP pairing identity stored there.
+          EOF
+          zip -r -q output/LUMAIRIE-EE04-BLE-CORE-336-SOURCE.zip firmware/lumairie-ee04/device output/README.txt
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: LUMAIRIE-EE04-BLE-CORE-336-SOURCE
+          path: output/LUMAIRIE-EE04-BLE-CORE-336-SOURCE.zip
+          if-no-files-found: error
