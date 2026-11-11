@@ -94,12 +94,18 @@ static void event_handler(void *ctx, esp_event_base_t base, int32_t id, void *da
         break;
       case NETWORK_PROV_WIFI_CRED_FAIL:
         failed = true; state = FrameState::PROVISIONING_FAILED; break;
+      case NETWORK_PROV_END:
+        // Arduino WiFiGeneric deinitializes the manager on this event.
+        // A future router disconnect must be allowed to offer BLE again.
+        manager_ready = false;
+        break;
       default: break;
     }
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     connected = true; failed = false; connected_at = millis();
     state = FrameState::WIFI_CONNECTED;
   } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    if (connected) connection_start = millis(); // fresh recovery window
     connected = false;
     // Do not hide an active BLE setup screen with background STA retries.
     if (!failed && !manager_ready) state = FrameState::CONNECTING_WIFI;
