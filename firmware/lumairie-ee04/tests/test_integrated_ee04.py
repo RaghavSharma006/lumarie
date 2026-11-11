@@ -54,5 +54,29 @@ class EE04Contract(unittest.TestCase):
         self.assertIn('TFT_WHITE', screen)
         self.assertIn('esp_read_mac(mac,ESP_MAC_BT)', identity)
 
+    def test_saved_wifi_recovers_ble_without_erasing_factory_identity(self):
+        firmware = source(FW/'src/provisioning.cpp')
+        self.assertIn('Saved Wi-Fi unavailable; enabling BLE reprovisioning', firmware)
+        self.assertIn('start_ble_setup(identity_ble_name)', firmware)
+        self.assertIn('NETWORK_PROV_SECURITY_2', firmware)
+        self.assertIn('NETWORK_PROV_END', firmware)
+        self.assertIn('if (connected) connection_start = millis()', firmware)
+        self.assertNotIn('nvs_flash_erase', firmware)
+
+    def test_scan_uses_authenticated_lan_before_ble(self):
+        app = source(APP)
+        pairing = source(PAIR)
+        transport = source(ROOT / 'apps/mobile/lib/services/frame_wifi_transport_io.dart')
+        self.assertIn('await physical.FrameWifiTransport().discover(qr);', app)
+        self.assertIn('await pairing.rememberLanAuthenticated(qr);', app)
+        self.assertIn('await pairing.pair(qr);', app)
+        self.assertLess(app.index('await physical.FrameWifiTransport().discover(qr);'),
+                        app.index('await pairing.pair(qr);'))
+        self.assertIn('Future<void> rememberLanAuthenticated(', pairing)
+        self.assertIn('_saveAuthenticated(qr)', pairing)
+        self.assertIn("_equal(bytes.sublist(30), _mac(qr.secret, bytes.sublist(0, 30)))", transport)
+        manifest = source(ROOT / 'apps/mobile/android/app/src/main/AndroidManifest.xml')
+        self.assertIn('android.permission.ACCESS_FINE_LOCATION', manifest)
+
 if __name__ == '__main__':
     unittest.main()
