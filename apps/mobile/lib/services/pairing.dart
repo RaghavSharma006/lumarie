@@ -37,11 +37,30 @@ class PairingService {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  // Store only after BLE Security 2 PING or authenticated LAN HMAC discovery.
+  Future<void> _saveAuthenticated(PairingCredential qr) async {
+    await _storage.write(
+      key: 'frame_${qr.id}',
+      value: jsonEncode({
+        'id': qr.id,
+        'name': qr.name,
+        'user': qr.username,
+        'secret': qr.secret,
+      }),
+    );
+  }
+
+  /// The caller must first verify an authenticated, nonce-bound LAN discovery
+  /// reply from FrameWifiTransport.discover. Merely scanning a QR is not proof
+  /// that the actual frame is present.
+  Future<void> rememberLanAuthenticated(PairingCredential qr) =>
+      _saveAuthenticated(qr);
+
   Future<void> pair(PairingCredential qr) async {
     final found = await _native.scanBleDevices('LUMAIRE-');
     if (!found.contains(qr.name)) {
       throw StateError(
-          'Frame not advertising. Check that it is powered and ready for setup.');
+          'Frame not advertising over BLE. If the frame already joined Wi-Fi, connect your phone to the same network. Otherwise leave the frame powered for one minute so BLE recovery can start.');
     }
     final response = await _native.fetchCustomData(
       qr.name,
@@ -54,14 +73,7 @@ class PairingService {
     if (response == null || jsonDecode(response)['protocol'] != 1) {
       throw StateError('Frame identity or protocol could not be verified');
     }
-    await _storage.write(
-        key: 'frame_${qr.id}',
-        value: jsonEncode({
-          'id': qr.id,
-          'name': qr.name,
-          'user': qr.username,
-          'secret': qr.secret,
-        }));
+    await _saveAuthenticated(qr);
   }
 
 
