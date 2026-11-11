@@ -234,7 +234,20 @@ class _LumairieAppState extends State<LumairieApp> {
     });
     try {
       final qr = PairingCredential.parse(raw);
-      await PairingService().pair(qr);
+      final pairing = PairingService();
+      var pairedOverWifi = false;
+      // A provisioned frame stops advertising BLE. Its QR is still valid:
+      // first look for a nonce-bound HMAC reply on the local Wi-Fi network.
+      // Never accept an unverified QR as a successfully paired frame.
+      try {
+        await physical.FrameWifiTransport().discover(qr);
+        await pairing.rememberLanAuthenticated(qr);
+        pairedOverWifi = true;
+      } catch (_) {
+        // First setup, or a frame whose saved router is no longer reachable:
+        // authenticate through Espressif BLE Security 2 instead.
+        await pairing.pair(qr);
+      }
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pairedName', qr.name);
@@ -244,9 +257,12 @@ class _LumairieAppState extends State<LumairieApp> {
         pairedName = qr.name;
         pairedId = qr.id;
         pairingBusy = false;
+        wifiProvisionedHere = pairedOverWifi;
         demo = false;
       });
-      _notice('Frame authenticated and stored on this phone.');
+      _notice(pairedOverWifi
+          ? 'Frame authenticated on your local Wi-Fi and ready for photos.'
+          : 'Frame authenticated over BLE. Connect it to home Wi-Fi next.');
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1015,7 +1031,7 @@ class _LumairieAppState extends State<LumairieApp> {
         if (pairingError != null)
           Text(pairingError!,
               style: TextStyle(color: p.foreground, fontSize: 11)),
-        if (!demo && pairedId != null) ...[
+        if (!demo && pairedId != null && !wifiProvisionedHere) ...[
           PrimaryButton(
               label: wifiProvisionBusy
                   ? 'Connecting to Wi-Fi…'
@@ -1279,7 +1295,7 @@ class _ScanQrPageState extends State<ScanQrPage> {
         Padding(
             padding: const EdgeInsets.all(22),
             child: Text(
-                'Hold the physical pairing button, then scan the per-frame QR card.',
+                'Scan the QR displayed on your frame. For first setup, keep the frame powered until BLE is ready.',
                 style: Design.body(p, muted: true))),
       ])),
     );
