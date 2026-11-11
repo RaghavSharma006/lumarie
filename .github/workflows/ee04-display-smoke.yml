@@ -38,6 +38,31 @@ jobs:
       - name: Build integrated EE04 firmware
         working-directory: firmware/lumairie-ee04/device
         run: pio run -e ee04
+      - name: Decode on-device ESP32-S3 reboot-loop backtrace
+        working-directory: firmware/lumairie-ee04/device
+        shell: bash
+        run: |
+          set -euo pipefail
+          ELF=.pio/build/ee04/firmware.elf
+          test -s "$ELF"
+          find ~/.platformio/packages -type f -name '*addr2line' | head -15
+          ADDR2LINE="$(find ~/.platformio/packages -type f \( -name 'xtensa-esp32s3-elf-addr2line' -o -name 'xtensa-esp-elf-addr2line' \) | head -1)"
+          test -x "$ADDR2LINE"
+          echo "==== SHA256: compiled app vs uploaded test build ===="
+          sha256sum .pio/build/ee04/firmware.bin
+          echo "==== Symbolized physical crash (from 2026-11-11 serial log) ===="
+          "$ADDR2LINE" -a -f -C -i -e "$ELF" \
+            0x403873fd 0x403873fa 0x40386d39 0x40386e9c \
+            0x4037688f 0x403768a9 0x40376459 \
+            0x4204dc4b 0x4206e94a 0x42069681 0x4204e223 \
+            0x4206102b 0x42056d39 0x420533fe 0x4205292b \
+            0x42004383 0x420046c2 0x420037e9 0x42013842 0x40382365
+      - name: Upload compiled ELF for physical crash diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumairie-ee04-elf-for-crash-analysis
+          path: firmware/lumairie-ee04/device/.pio/build/ee04/firmware.elf
+          if-no-files-found: error
       - name: Upload integrated USB flash binary
         uses: actions/upload-artifact@v4
         with:

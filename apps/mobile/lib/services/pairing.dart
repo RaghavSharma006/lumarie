@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -37,31 +38,63 @@ class PairingService {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  // Store only after BLE Security 2 PING or authenticated LAN HMAC discovery.
+  Future<void> _saveAuthenticated(PairingCredential qr) async {
+    await _storage.write(
+      key: 'frame_${qr.id}',
+      value: jsonEncode({
+        'id': qr.id,
+        'name': qr.name,
+        'user': qr.username,
+        'secret': qr.secret,
+      }),
+    );
+  }
+
+  /// The caller must first verify an authenticated, nonce-bound LAN discovery
+  /// reply from FrameWifiTransport.discover. Merely scanning a QR is not proof
+  /// that the actual frame is present.
+  Future<void> rememberLanAuthenticated(PairingCredential qr) =>
+      _saveAuthenticated(qr);
+
   Future<void> pair(PairingCredential qr) async {
     final found = await _native.scanBleDevices('LUMAIRE-');
     if (!found.contains(qr.name)) {
       throw StateError(
-          'Frame not advertising. Check that it is powered and ready for setup.');
+          'Frame not advertising over BLE. If the frame already joined Wi-Fi, connect your phone to the same network. Otherwise leave the frame powered for one minute so BLE recovery can start.');
     }
-    final response = await _native.fetchCustomData(
-      qr.name,
-      qr.secret,
-      endpoint: 'frame',
-      payload: 'PING',
-      security: EspSecurityScheme.security2,
-      username: qr.username,
-    );
+    String? response;
+    try {
+      // Espressif's native client creates an authenticated Security2 session
+      // before it can send PING. A scan hit or GATT connection alone is not a
+      // paired frame. Preserve the actual QR username/password unchanged.
+      response = await _native.fetchCustomData(
+        qr.name,
+        qr.secret,
+        endpoint: 'frame',
+        payload: 'PING',
+        security: EspSecurityScheme.security2,
+        username: qr.username,
+      );
+    } on PlatformException catch (error) {
+      // Old native library versions misleadingly surfaced the exception's
+      // internal Java text. Give the friend a support code that can be sent
+      // without copying the pairing secret or using developer tools.
+      final details = '${error.message ?? ''} ${error.details ?? ''}';
+      if (error.code == 'E_CUSTOM_DATA' &&
+          details.contains('Session could not be established')) {
+        throw StateError(
+            'Bluetooth found ${qr.name}, but secure pairing did not finish '
+            '(LUM-SEC2-01). Scan the QR currently shown on this frame; '
+            'do not reset or erase it. If this persists, share only '
+            'LUM-SEC2-01 with support.');
+      }
+      rethrow;
+    }
     if (response == null || jsonDecode(response)['protocol'] != 1) {
       throw StateError('Frame identity or protocol could not be verified');
     }
-    await _storage.write(
-        key: 'frame_${qr.id}',
-        value: jsonEncode({
-          'id': qr.id,
-          'name': qr.name,
-          'user': qr.username,
-          'secret': qr.secret,
-        }));
+    await _saveAuthenticated(qr);
   }
 
 

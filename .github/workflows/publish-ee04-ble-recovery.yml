@@ -1,0 +1,132 @@
+name: Publish EE04 BLE pairing recovery hardware test
+
+on:
+  push:
+    branches:
+      - fix/ee04-ble-pairing-recovery
+    paths:
+      - .github/workflows/publish-ee04-ble-recovery.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-tested-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install GitHub CLI (provided on runner)
+        run: gh --version
+
+      - name: Verify exact successful CI build before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: 89d2e4cf0f41058a72004a401b1c06db92850a01
+          SOURCE_RUN: "42993308330"
+        run: |
+          set -euo pipefail
+          actual_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq .head_sha)"
+          conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq .conclusion)"
+          test "$actual_sha" = "$SOURCE_SHA"
+          test "$conclusion" = success
+
+      - name: Download APK and firmware from the same tested workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 42993308330 --repo "$GITHUB_REPOSITORY" --name lumairie-photo-transfer-android-test-apk --dir out/app
+          gh run download 42993308330 --repo "$GITHUB_REPOSITORY" --name lumairie-ee04-flash-images --dir out/flash
+          test -s out/app/app-release.apk
+          test -s out/flash/bootloader.bin
+          test -s out/flash/partitions.bin
+          test -s out/flash/firmware.bin
+
+      - name: Package firmware with full-flash instructions and checksums
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp out/app/app-release.apk release/LUMAIRIE-Android-BLE-Repair.apk
+          cp out/flash/firmware.bin release/LUMAIRIE-ESP32S3-BLE-Repair-firmware.bin
+          cat > out/flash/READ_ME_FIRST.txt <<'EOF'
+          LUMAIRIE EE04 BLE core 3.3.6 diagnostic (hardware test) - Seeed XIAO ESP32-S3 Plus
+          Read this before flashing. Factory QR/SRP pairing is stored in NVS.
+          DO NOT run erase_flash or overwrite the NVS partition.
+
+          Prerequisite: Python and esptool installed:
+              py -3.13 -m pip install --upgrade esptool
+          Confirm your USB serial COM port in Windows Device Manager.
+          Close any serial monitor and use the USB data cable.
+
+          FULL BOOTLOADER + PARTITION TABLE + APP FLASH (preserves NVS):
+              py -3.13 -m esptool --chip esp32s3 --port COM3 --baud 115200 write-flash 0x0 bootloader.bin 0x8000 partitions.bin 0x10000 firmware.bin
+
+          If keeping the SAME known-good EE04 bootloader/partition layout, app-only:
+              py -3.13 -m esptool --chip esp32s3 --port COM3 --baud 115200 write-flash 0x10000 firmware.bin
+
+          Replace COM3 if another port is shown in Device Manager.
+          Never flash this on a different ESP32/display/partition board.
+          Check firmware and APK using SHA256SUMS.txt.
+          BLE and real hardware Wi-Fi pairing have NOT been validated on a physical frame.
+          WARNING: core 3.3.6 / ESP-IDF 5.5.2 is an unpatched diagnostic
+          downgrade; use only for controlled testing, never production deployment.
+          EOF
+          (
+            cd out/flash
+            zip -q -9 ../../release/LUMAIRIE-EE04-BLE-Repair-Full-Flash.zip bootloader.bin partitions.bin firmware.bin READ_ME_FIRST.txt
+          )
+          ( cd release && sha256sum *.apk *.bin *.zip > SHA256SUMS.txt )
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          ## LUMAIRIE EE04 BLE recovery — hardware test build
+
+          This prerelease contains the exact tested artifacts from GitHub Actions run
+          [42993308330](https://github.com/RaghavSharma006/lumarie/actions/runs/42993308330)
+          built from commit `89d2e4cf0f41058a72004a401b1c06db92850a01`.
+
+          - **Android APK**: `LUMAIRIE-Android-BLE-Repair.apk`
+          - **Full ESP32-S3 flash ZIP**: `LUMAIRIE-EE04-BLE-Repair-Full-Flash.zip`
+          - **Application-only firmware**: `LUMAIRIE-ESP32S3-BLE-Repair-firmware.bin`
+          - **Checksums**: `SHA256SUMS.txt`
+
+          ESP32 firmware is pinned to Arduino-ESP32 core 3.3.6 and matching
+          precompiled ESP-IDF libraries to test recovery from a reported core
+          3.3.7 Bluetooth controller heap panic on the XIAO ESP32-S3.
+          This is a **diagnostic/hardware-test prerelease only**, NOT suitable
+          for production. ESP-IDF v5.5.2 (used by core 3.3.6) predates a
+          May 2026 protocomm Security2 BLE vulnerability fix (CVE-2026-45542).
+          Limit BLE provisioning exposure and upgrade to a patched ESP-IDF
+          version before shipping devices.
+
+          Firmware and Flutter compile and automated tests passed. **Not yet physically
+          verified** on EE04 hardware. Flash only the matching Seeed XIAO ESP32-S3
+          Plus / EE04 / 7.3-inch display board. Do not erase flash or NVS: that
+          can destroy per-device QR and SRP identity and make the device unpairable.
+          If an old app has a different signing key, Android may require
+          uninstalling it; preserve the QR and pairing information first.
+
+          Full flash without erase, from the unzipped folder (replace COM3 as needed):
+
+          ```powershell
+          py -3.13 -m pip install --upgrade esptool
+          py -3.13 -m esptool --chip esp32s3 --port COM3 --baud 115200 write-flash 0x0 bootloader.bin 0x8000 partitions.bin 0x10000 firmware.bin
+          ```
+
+          Expected behavior: scan unique QR; authenticate via BLE Security 2
+          if unconfigured; send home Wi-Fi credentials and connect to router;
+          already-online frame can authenticate over LAN. If previously saved
+          Wi-Fi is unavailable, firmware attempts BLE reprovisioning.
+          Access from another city is not provided by this build.
+          EOF
+
+      - name: Publish separate GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v0.2.2-ee04-ble-core-336-test.1
+          SOURCE_SHA: 89d2e4cf0f41058a72004a401b1c06db92850a01
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/LUMAIRIE-Android-BLE-Repair.apk release/LUMAIRIE-EE04-BLE-Repair-Full-Flash.zip release/LUMAIRIE-ESP32S3-BLE-Repair-firmware.bin release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/LUMAIRIE-Android-BLE-Repair.apk release/LUMAIRIE-EE04-BLE-Repair-Full-Flash.zip release/LUMAIRIE-ESP32S3-BLE-Repair-firmware.bin release/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "LUMAIRIE EE04 BLE core 3.3.6 diagnostic (hardware test)" --notes-file release/RELEASE_NOTES.md --prerelease
+          fi
